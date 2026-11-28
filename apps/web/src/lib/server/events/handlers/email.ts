@@ -12,6 +12,7 @@ import {
   sendStatusMaintenanceScheduledEmail,
   sendTicketEventEmail,
   sendNoteMentionEmail,
+  sendConversationAssignedEmail,
   sendModerationDecisionEmail,
 } from '@quackback/email'
 import type { EmailResult, IncidentImpact, SendingIdentity } from '@quackback/email'
@@ -24,6 +25,7 @@ import type {
   EmailConfig,
   TicketEmailConfig,
   NoteMentionEmailConfig,
+  ConversationAssignedEmailConfig,
   ModerationDecisionEmailConfig,
 } from '../hook-types'
 import {
@@ -305,6 +307,18 @@ async function deliverEmail(
         preferencesUrl: c.preferencesUrl,
         logoUrl: c.logoUrl,
         ...noteMentionThreading(c),
+      })
+    } else if (event.type === 'conversation.assigned') {
+      const c = config as unknown as ConversationAssignedEmailConfig
+      result = await sendConversationAssignedEmail({
+        to: email,
+        assignedToYou: c.assignedToYou,
+        customerName: c.customerName,
+        preview: c.preview,
+        conversationUrl: c.ctaUrl,
+        workspaceName: c.workspaceName,
+        preferencesUrl: c.preferencesUrl,
+        logoUrl: c.logoUrl,
       })
     } else if (event.type === 'changelog.published') {
       const changelogCfg = config as Record<string, unknown>

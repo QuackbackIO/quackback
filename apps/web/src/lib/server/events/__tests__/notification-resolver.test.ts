@@ -25,6 +25,7 @@ const h = vi.hoisted(() => ({
   getTicketAssignedEmailTargets: vi.fn(),
   getSlaEmailTargets: vi.fn(),
   getConversationNoteMentionedEmailTargets: vi.fn(),
+  getConversationAssignedEmailTargets: vi.fn(),
   getModerationDecisionTargets: vi.fn(),
 }))
 vi.mock('../hook-context', () => ({ buildHookContext: h.buildHookContext }))
@@ -51,6 +52,7 @@ vi.mock('../targets', () => ({
   getTicketAssignedEmailTargets: h.getTicketAssignedEmailTargets,
   getSlaEmailTargets: h.getSlaEmailTargets,
   getConversationNoteMentionedEmailTargets: h.getConversationNoteMentionedEmailTargets,
+  getConversationAssignedEmailTargets: h.getConversationAssignedEmailTargets,
   getModerationDecisionTargets: h.getModerationDecisionTargets,
 }))
 
@@ -93,6 +95,7 @@ describe('notification resolver routing (WO-8c)', () => {
     h.getTicketAssignedEmailTargets.mockResolvedValue([])
     h.getSlaEmailTargets.mockResolvedValue([])
     h.getConversationNoteMentionedEmailTargets.mockResolvedValue([])
+    h.getConversationAssignedEmailTargets.mockResolvedValue([])
   })
 
   it('interestedIn covers subscriber, mention, status-publish, and bell types', () => {
@@ -164,6 +167,14 @@ describe('notification resolver routing (WO-8c)', () => {
     expect(out.map((t) => t.type)).toEqual(['post_owner_bell'])
     expect(h.getPostOwnerAssignedTargets).toHaveBeenCalledTimes(1)
     expect(notificationResolver.interestedIn('post.owner_assigned')).toBe(true)
+  })
+
+  it('routes conversation.assigned to the bell and the assignment email', async () => {
+    h.getConversationAssignedTargets.mockResolvedValue(T('assigned_bell')[0])
+    h.getConversationAssignedEmailTargets.mockResolvedValue(T('assigned_email'))
+    const out = await notificationResolver.resolve(evt('conversation.assigned'))
+    expect(out.map((t) => t.type).sort()).toEqual(['assigned_bell', 'assigned_email'])
+    expect(h.getConversationAssignedEmailTargets).toHaveBeenCalledTimes(1)
   })
 
   it('routes ticket.created to the email builder only (no bell for it)', async () => {

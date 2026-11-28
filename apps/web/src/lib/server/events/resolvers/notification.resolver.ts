@@ -35,6 +35,7 @@ import {
   getTicketAssignedEmailTargets,
   getSlaEmailTargets,
   getConversationNoteMentionedEmailTargets,
+  getConversationAssignedEmailTargets,
   getModerationDecisionTargets,
 } from '../targets'
 import type { SinkResolver } from './registry'
@@ -89,6 +90,8 @@ const EMAIL_BUILDERS: Record<string, EmailBuilder> = {
   'sla.approaching_breach': getSlaEmailTargets,
   'sla.breached': getSlaEmailTargets,
   'conversation.note_mentioned': getConversationNoteMentionedEmailTargets,
+  // The assignee is told by email too, not only by the bell.
+  'conversation.assigned': getConversationAssignedEmailTargets,
   // The author's bell and email for the team's decision on their held item.
   'post.approved': getModerationDecisionTargets,
   'post.rejected': getModerationDecisionTargets,

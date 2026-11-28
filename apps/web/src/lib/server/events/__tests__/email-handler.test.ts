@@ -8,6 +8,7 @@ vi.mock('@quackback/email', () => ({
   sendPostMentionEmail: vi.fn().mockResolvedValue({ sent: true }),
   sendTicketEventEmail: vi.fn().mockResolvedValue({ sent: true }),
   sendNoteMentionEmail: vi.fn().mockResolvedValue({ sent: true }),
+  sendConversationAssignedEmail: vi.fn().mockResolvedValue({ sent: true }),
   sendStatusIncidentPublishedEmail: vi.fn().mockResolvedValue({ sent: true }),
   sendStatusMaintenanceScheduledEmail: vi.fn().mockResolvedValue({ sent: true }),
   sendModerationDecisionEmail: vi.fn().mockResolvedValue({ sent: true }),
@@ -78,6 +79,7 @@ import {
   sendPostMentionEmail,
   sendTicketEventEmail,
   sendNoteMentionEmail,
+  sendConversationAssignedEmail,
   sendStatusIncidentPublishedEmail,
   sendStatusMaintenanceScheduledEmail,
   sendModerationDecisionEmail,
@@ -96,6 +98,7 @@ const mockChangelogPublishedEmail = vi.mocked(sendChangelogPublishedEmail)
 const mockPostMentionEmail = vi.mocked(sendPostMentionEmail)
 const mockTicketEventEmail = vi.mocked(sendTicketEventEmail)
 const mockNoteMentionEmail = vi.mocked(sendNoteMentionEmail)
+const mockConversationAssignedEmail = vi.mocked(sendConversationAssignedEmail)
 
 // The email handler only reads event.type, so data is irrelevant for these tests
 const statusChangedEvent = {
@@ -978,6 +981,60 @@ describe('emailHook: the team decision on a held item', () => {
         postTitle: 'Dark mode',
         postUrl: undefined,
         unsubscribeUrl: 'https://example.com/unsubscribe',
+      })
+    )
+  })
+})
+
+describe('emailHook — conversation.assigned', () => {
+  const assignedEvent = {
+    id: 'evt-assigned',
+    type: 'conversation.assigned',
+    timestamp: '2026-01-01T00:00:00Z',
+    actor: { type: 'user', principalId: 'principal_actor' },
+    data: {
+      conversation: {
+        id: 'conversation_1',
+        status: 'open',
+        channel: 'messenger',
+        priority: 'none',
+      },
+      assignedAgentPrincipalId: 'principal_agent',
+      previousAgentPrincipalId: null,
+    },
+  } as unknown as EventData
+
+  const target: EmailTarget = {
+    email: 'agent@example.com' as EmailTarget['email'],
+    unsubscribeUrl: '',
+  }
+
+  beforeEach(() => {
+    mockConversationAssignedEmail.mockClear()
+    mockConversationAssignedEmail.mockResolvedValue({ sent: true })
+  })
+
+  it('sends the assignment alert with the copy flag, preview and inbox link', async () => {
+    const result = await emailHook.run(assignedEvent, target, {
+      workspaceName: 'Acme Support',
+      conversationId: 'conversation_1',
+      assignedToYou: true,
+      customerName: 'Jane',
+      preview: 'Cannot log in',
+      ctaUrl: 'https://w.example/admin/inbox?i=conversation_1',
+      preferencesUrl: 'https://w.example/settings/preferences',
+    })
+
+    expect(result).toEqual({ success: true })
+    expect(mockConversationAssignedEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: 'agent@example.com',
+        assignedToYou: true,
+        customerName: 'Jane',
+        preview: 'Cannot log in',
+        conversationUrl: 'https://w.example/admin/inbox?i=conversation_1',
+        workspaceName: 'Acme Support',
+        preferencesUrl: 'https://w.example/settings/preferences',
       })
     )
   })

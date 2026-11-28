@@ -213,6 +213,24 @@ export interface TicketEmailConfig {
 }
 
 /**
+ * Conversation-assignment email config. One per recipient, because
+ * the copy differs for the direct assignee and for members of the assigned team.
+ */
+export interface ConversationAssignedEmailConfig {
+  workspaceName: string
+  conversationId: string
+  /** True for the teammate the conversation was assigned to, false for team members. */
+  assignedToYou: boolean
+  customerName?: string
+  /** Conversation subject, already truncated. Empty string when there is none. */
+  preview: string
+  /** Admin inbox deep link. */
+  ctaUrl: string
+  logoUrl?: string
+  preferencesUrl?: string
+}
+
+/**
  * Internal-note @-mention email config. Its own shape rather than a widened
  * EmailConfig (which is post-specific) or TicketEmailConfig (a note mention is
  * conversation-scoped and carries no ticket), matching how every other

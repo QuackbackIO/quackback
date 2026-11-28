@@ -75,6 +75,10 @@ import {
 } from './templates/moderation-decision'
 export type { ModerationDecision, ModeratedItem } from './templates/moderation-decision'
 import { NoteMentionEmail } from './templates/note-mention'
+import {
+  ConversationAssignedEmail,
+  conversationAssignedHeadline,
+} from './templates/conversation-assigned'
 import { TicketEventEmail } from './templates/ticket-event'
 import { ChangelogPublishedEmail } from './templates/changelog-published'
 import { PasswordResetEmail } from './templates/password-reset'
@@ -1788,6 +1792,54 @@ export async function sendModerationDecisionEmail(
 // ============================================================================
 // Note Mention Email
 // ============================================================================
+
+export interface SendConversationAssignedEmailArgs {
+  to: string
+  /** True when assigned to the recipient, false when to their team. */
+  assignedToYou: boolean
+  /** Name of the customer in the conversation, when known. */
+  customerName?: string
+  /** Conversation subject or opening line. Empty string suppresses the quote block. */
+  preview: string
+  /** Admin inbox deep link. */
+  conversationUrl: string
+  workspaceName: string
+  preferencesUrl?: string
+  logoUrl?: string
+}
+
+/** Alert a teammate that a conversation was assigned to them or their team. */
+export async function sendConversationAssignedEmail(
+  args: SendConversationAssignedEmailArgs
+): Promise<EmailResult> {
+  const {
+    to,
+    assignedToYou,
+    customerName,
+    preview,
+    conversationUrl,
+    workspaceName,
+    preferencesUrl,
+    logoUrl,
+  } = args
+
+  return sendEmail({
+    to,
+    subject: conversationAssignedHeadline(assignedToYou),
+    react: ConversationAssignedEmail({
+      assignedToYou,
+      customerName,
+      preview,
+      conversationUrl,
+      workspaceName,
+      preferencesUrl,
+      logoUrl,
+    }),
+    emailType: 'ConversationAssignedEmail',
+    workspaceName,
+    preview: { conversationUrl },
+  })
+}
 
 export interface SendNoteMentionEmailArgs {
   to: string

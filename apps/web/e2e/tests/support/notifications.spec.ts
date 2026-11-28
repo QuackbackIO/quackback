@@ -141,12 +141,24 @@ test.describe('notifications', () => {
       expect(refused.ok).toBe(false)
       expect(await bellsFor(removed.principalId, second.conversationId)).toEqual([])
 
-      // Conversation assignment sends no email. (In-scope teammates also get
-      // the team's new-message email for other tests' visitors, which the
-      // per-type switch does not cover, a known gap: those are left out.)
+      // Conversation assignment emails the assignee and the team,
+      // never the actor or an outsider. (In-scope teammates also get the team's
+      // new-message email for other tests' visitors: those are left out.)
       await waitForEventHandled(conversationId, { type: 'conversation.assigned' })
+      await waitForEmailLog(assignee.email, { email_type: 'ConversationAssignedEmail' })
+      await waitForEmailLog(member.email, { email_type: 'ConversationAssignedEmail' })
       const mails = await emailLogFor(assignee.email)
-      expect(mails.filter((m) => m.email_type !== 'ConversationMessageEmail')).toEqual([])
+      expect(
+        mails.filter(
+          (m) =>
+            m.email_type !== 'ConversationMessageEmail' &&
+            m.email_type !== 'ConversationAssignedEmail'
+        )
+      ).toEqual([])
+      const assignedMails = async (t: TestTeammate) =>
+        (await emailLogFor(t.email)).filter((m) => m.email_type === 'ConversationAssignedEmail')
+      expect(await assignedMails(actor)).toEqual([])
+      expect(await assignedMails(outsider)).toEqual([])
     }
   )
 
