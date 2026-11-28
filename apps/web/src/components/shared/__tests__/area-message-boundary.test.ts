@@ -21,8 +21,9 @@ const SRC = resolve(__dirname, '../../..')
  */
 const AREAS: Record<MessageArea, { users: RegExp; importers: RegExp | null }> = {
   notificationPreferences: {
-    users: /^components\/settings\/notification-matrix-form\.tsx$/,
-    importers: /^routes\/(_portal\/settings\.preferences|admin\/settings\.notifications)\.tsx$/,
+    users: /^components\/settings\/notification-matrix-(form\.tsx|admin-labels\.ts)$/,
+    importers:
+      /^(routes\/(_portal\/settings\.preferences|admin\/settings\.notifications)\.tsx|components\/settings\/notification-matrix-form\.tsx)$/,
   },
   personalApiKeys: {
     users: /^components\/settings\/api-keys\//,

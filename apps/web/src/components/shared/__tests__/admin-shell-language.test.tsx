@@ -22,6 +22,9 @@ import { StateBadge } from '@/components/shared/state-badge'
 import { ErrorNoticeLanguage } from '@/components/shared/error-notice-language'
 import { Calendar } from '@/components/ui/calendar'
 import { slashMenuItems } from '@/components/ui/rich-text-editor'
+import { SETTINGS_PAGES, settingsPageTitle } from '@/lib/shared/settings-pages'
+import { ADMIN_TYPE_LABELS } from '@/components/settings/notification-matrix-admin-labels'
+import { NOTIFICATION_CATALOG } from '@/lib/shared/notifications/catalog'
 
 afterEach(cleanup)
 
@@ -118,5 +121,28 @@ describe('in German', () => {
     expect(describeError(new TypeError('Failed to fetch'), 'x', team).title).toBe('offline-x')
     release()
     expect(describeError(new TypeError('Failed to fetch'), 'x', team).title).toBe("You're offline")
+  })
+
+  it('names settings pages, automation pages included, in the page language', () => {
+    const intl = createIntl({ locale: 'de', messages: de })
+    expect(settingsPageTitle(intl, '/admin/settings/general', 'General')).toBe('Allgemein')
+    expect(settingsPageTitle(intl, '/admin/settings/notifications', 'Notifications')).toBe(
+      'Benachrichtigungen'
+    )
+    expect(settingsPageTitle(intl, '/admin/settings/agent', 'Agent')).toBe(
+      (de as Record<string, string>)['automation.nav.agent']
+    )
+    for (const { label, labelId } of Object.values(SETTINGS_PAGES)) {
+      expect((en as Record<string, string>)[labelId], labelId).toBe(label)
+    }
+  })
+
+  it('words every notification row the admin shows', () => {
+    const intl = createIntl({ locale: 'de', messages: de })
+    const assigned = ADMIN_TYPE_LABELS.post_owner_assigned!
+    expect(intl.formatMessage(assigned.label)).toBe('Beitrag zugewiesen')
+    for (const meta of NOTIFICATION_CATALOG.filter((row) => !row.surfaces.includes('portal'))) {
+      expect(ADMIN_TYPE_LABELS[meta.type]?.label.defaultMessage, meta.type).toBe(meta.label)
+    }
   })
 })

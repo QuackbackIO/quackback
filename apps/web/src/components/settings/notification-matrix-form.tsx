@@ -23,6 +23,7 @@ import {
 import type { NotificationMatrix } from '@/lib/server/domains/subscriptions/notification-matrix'
 import { ONBOARDING_TIPS_KEY } from '@/lib/shared/onboarding-tips'
 import { errorText } from '@/lib/client/error-text'
+import { ADMIN_TYPE_LABELS } from './notification-matrix-admin-labels'
 
 type Message = { id: string; defaultMessage: string }
 
@@ -45,8 +46,8 @@ const CHANNEL_LABELS = {
   email: { id: 'portal.settings.notifications.channel.email', defaultMessage: 'Email' },
 } as const satisfies Partial<Record<NotificationChannel, Message>>
 
-/** The rows the portal shows, in the app's language. Admin-only rows keep the
- *  catalog's English label and description. */
+/** The rows the portal shows, in the app's language. The rows only the admin
+ *  shows are in ADMIN_TYPE_LABELS. */
 export const TYPE_LABELS: Partial<
   Record<NotificationTypeMeta['type'], { label: Message; description: Message }>
 > = {
@@ -450,7 +451,7 @@ function MatrixRow({
   const intl = useIntl()
   const inAppChecked = matrix?.[meta.type]?.inApp ?? true
   const emailChecked = matrix?.[meta.type]?.email ?? true
-  const translated = TYPE_LABELS[meta.type]
+  const translated = TYPE_LABELS[meta.type] ?? ADMIN_TYPE_LABELS[meta.type]
   const label = translated ? intl.formatMessage(translated.label) : meta.label
   const description = translated ? intl.formatMessage(translated.description) : meta.description
 

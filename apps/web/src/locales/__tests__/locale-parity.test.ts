@@ -220,6 +220,7 @@ const SAME_AS_ENGLISH: Record<string, readonly string[]> = {
     'Tickets',
     'Widget',
     'Workflows',
+    'Workspace',
     'Workspaces',
     'Zoom',
     'via {workflowName}',
