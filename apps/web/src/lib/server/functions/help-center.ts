@@ -261,12 +261,14 @@ export const listArticlesFn = createServerFn({ method: 'GET' })
       import('@/lib/server/domains/settings/settings.service'),
     ])
     const { locales } = await getHelpCenterConfig()
-    const languages = await listArticleLanguageSummaries(result.items, [
-      locales.default,
-      ...locales.additional,
-    ])
+    const languagesOffered = locales.additional.length > 0
+    const languages = languagesOffered
+      ? await listArticleLanguageSummaries(result.items, [locales.default, ...locales.additional])
+      : new Map<string, never[]>()
     return {
       ...result,
+      /** The help center has more than one language (the list's Languages filter). */
+      languagesOffered,
       items: result.items.map((a) => ({
         ...serializeArticle(a),
         languages: languages.get(a.id) ?? [],

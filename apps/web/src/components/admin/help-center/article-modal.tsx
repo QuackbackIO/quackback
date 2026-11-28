@@ -16,7 +16,8 @@ import {
   HelpCenterMetadataSidebarContent,
 } from './help-center-metadata-sidebar'
 import { ArticleLanguageBar } from './article-language-bar'
-import { ArticleTranslationPane, articleLanguagesKey } from './article-translation-pane'
+import { ArticleTranslationPane } from './article-translation-pane'
+import { articleLanguagesKey } from './article-language-actions'
 import { languageDotState } from './article-languages'
 import { getArticleLanguagesFn } from '@/lib/server/functions/help-center-article-languages'
 import { cn } from '@/lib/shared/utils'

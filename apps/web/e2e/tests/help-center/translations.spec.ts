@@ -43,17 +43,22 @@ async function translationRow(article: HcArticle, locale: string) {
   return row
 }
 
-/** Open an article's Translations dialog on French. */
+/**
+ * Open an article in the editor on its French tab. Returns the French tab and
+ * the visible title and body fields (the other languages' forms stay mounted
+ * so their unsaved edits survive a tab switch; the French one is the last).
+ */
 async function openFrench(admin: Page, article: HcArticle) {
   await admin.goto(editorPath(article))
-  const manage = admin.getByRole('button', { name: 'Manage' })
-  await waitForHydration(manage)
-  await manage.click()
-  const dialog = admin.getByRole('dialog', { name: 'Translations' })
-  await dialog.getByRole('combobox').click()
-  await admin.getByRole('option', { name: 'Français' }).click()
-  await expect(dialog.locator('#translation-title')).not.toHaveValue('')
-  return dialog
+  const bar = admin.getByRole('tablist', { name: 'Article languages' })
+  const french = bar.getByRole('tab', { name: /Français/ })
+  await waitForHydration(french)
+  await french.click()
+  return {
+    french,
+    title: () => admin.getByLabel('Article title').last(),
+    body: () => admin.locator('[contenteditable="true"]').last(),
+  }
 }
 
 test.describe('help center languages', { tag: '@isolated' }, () => {
@@ -123,7 +128,7 @@ test.describe('help center languages', { tag: '@isolated' }, () => {
   )
 
   test(
-    'HC-A-51 a translation opens seeded with the article and saves as a draft',
+    'HC-A-51 a missing language starts from the article text and saves as a draft',
     { tag: '@core' },
     async ({ asPerson, marker, page, playwright }) => {
       const hc = await hcApi(playwright)
@@ -137,22 +142,26 @@ test.describe('help center languages', { tag: '@isolated' }, () => {
       })
       await withSettings(FRENCH, async () => {
         const admin = await asPerson('admin')
-        const dialog = await openFrench(admin, article)
-        await expect(dialog).toContainText('Untranslated')
-        await expect(dialog.locator('#translation-title')).toHaveValue(article.title)
-        await expect(dialog.locator('#translation-description')).toHaveValue(
+        const fr = await openFrench(admin, article)
+        await expect(fr.french).toHaveText('FrançaisNot translated')
+        await expect(admin.getByText('This article is not in Français yet')).toBeVisible()
+        await admin.getByRole('button', { name: 'Start from the English text' }).click()
+        await expect(fr.title()).toHaveValue(article.title)
+        await expect(admin.getByLabel('Page description').last()).toHaveValue(
           `Original summary ${marker}`
         )
-        await expect(dialog.locator('#translation-content')).toHaveValue(
-          new RegExp(`Original body ${marker}`)
-        )
+        await expect(fr.body()).toContainText(`Original body ${marker}`)
 
-        await dialog.locator('#translation-title').fill(`Traduit ${marker}`)
-        await dialog.locator('#translation-content').fill(`Corps traduit ${marker}`)
-        await dialog.getByRole('button', { name: 'Save draft' }).click()
-        await expect(dialog).toContainText('Draft')
+        await fr.title().fill(`Traduit ${marker}`)
+        await fr.body().click()
+        await admin.keyboard.press('ControlOrMeta+a')
+        await admin.keyboard.type(`Corps traduit ${marker}`)
+        await admin.getByRole('button', { name: 'Save changes' }).click()
         await expect.poll(async () => (await translationRow(article, 'fr'))?.status).toBe('draft')
-        expect((await translationRow(article, 'fr'))?.title).toBe(`Traduit ${marker}`)
+        const row = await translationRow(article, 'fr')
+        expect(row?.title).toBe(`Traduit ${marker}`)
+        expect(row?.content).toContain(`Corps traduit ${marker}`)
+        await expect(fr.french).toHaveText('FrançaisDraft')
         // A draft translation is not public: the French page shows the
         // original, with a notice.
         const french = await visit(page, articlePath(article, 'fr'))
@@ -177,44 +186,46 @@ test.describe('help center languages', { tag: '@isolated' }, () => {
       })
       await withSettings(FRENCH, async () => {
         const admin = await asPerson('admin')
-        const dialog = await openFrench(admin, article)
-        await dialog.locator('#translation-title').fill(`Publié ${marker}`)
-        await dialog.getByRole('button', { name: 'Save draft' }).click()
+        const fr = await openFrench(admin, article)
+        await admin.getByRole('button', { name: 'Start from the English text' }).click()
+        await fr.title().fill(`Publié ${marker}`)
+        await admin.getByRole('button', { name: 'Save changes' }).click()
         await expect.poll(async () => (await translationRow(article, 'fr'))?.status).toBe('draft')
 
-        await dialog.getByRole('button', { name: 'Publish' }).click()
+        // The sidebar's status toggles the publish state of this language only.
+        await admin.getByRole('button', { name: 'Draft', exact: true }).click()
         await expect
           .poll(async () => (await translationRow(article, 'fr'))?.status)
           .toBe('published')
+        await expect(fr.french).toHaveText('FrançaisPublished')
         const live = await visit(page, articlePath(article, 'fr'))
         expect(live.status).toBe(200)
         expect(live.text).toContain(`Publié ${marker}`)
 
-        await dialog.getByRole('button', { name: 'Unpublish' }).click()
+        await admin.getByRole('button', { name: 'Published', exact: true }).click()
         await expect.poll(async () => (await translationRow(article, 'fr'))?.status).toBe('draft')
         const unpublished = await visit(page, articlePath(article, 'fr'))
         expect(unpublished.status).toBe(200)
         expect(unpublished.text).not.toContain(`Publié ${marker}`)
         expect(unpublished.text).toContain('hc-fallback-notice')
 
-        await dialog.getByRole('button', { name: 'Delete translation' }).click()
+        await admin.getByRole('button', { name: 'Delete translation' }).click()
         await expect.poll(async () => (await translationRow(article, 'fr')) ?? null).toBeNull()
-        await expect(dialog).toContainText('Untranslated')
+        await expect(admin.getByText('This article is not in Français yet')).toBeVisible()
+        await expect(fr.french).toHaveText('FrançaisNot translated')
       })
     }
   )
 
   test(
-    'HC-A-53 Save draft on a published translation does not change the live page',
-    {
-      tag: '@core',
-    },
+    'HC-A-53 saving a published translation keeps it published and updates the live page',
+    { tag: '@core' },
     async ({ asPerson, marker, page, playwright }) => {
       const hc = await hcApi(playwright)
-      const category = await hcCategory(hc, `Quirk ${marker}`)
+      const category = await hcCategory(hc, `Live ${marker}`)
       const article = await hcArticle(hc, {
         categoryId: category.id,
-        title: `Quirk ${marker}`,
+        title: `Live ${marker}`,
         publish: true,
       })
       await withSettings(FRENCH, async () => {
@@ -223,18 +234,17 @@ test.describe('help center languages', { tag: '@isolated' }, () => {
           VALUES (gen_random_uuid(), ${article.uuid}, 'fr', ${`En ligne ${marker}`}, 'Texte.',
             'published', NOW(), NOW())`
         const admin = await asPerson('admin')
-        const dialog = await openFrench(admin, article)
-        await expect(dialog.locator('#translation-title')).toHaveValue(`En ligne ${marker}`)
-        await dialog.locator('#translation-title').fill(`Brouillon ${marker}`)
-        await dialog.getByRole('button', { name: 'Save draft' }).click()
+        const fr = await openFrench(admin, article)
+        await expect(fr.title()).toHaveValue(`En ligne ${marker}`)
+        await fr.title().fill(`Corrigé ${marker}`)
+        await admin.getByRole('button', { name: 'Save changes' }).click()
         await expect
-          .poll(async () => {
-            const row = await translationRow(article, 'fr')
-            return row?.title === `Brouillon ${marker}` || row?.status === 'draft'
-          })
-          .toBe(true)
+          .poll(async () => (await translationRow(article, 'fr'))?.title)
+          .toBe(`Corrigé ${marker}`)
+        expect((await translationRow(article, 'fr'))?.status).toBe('published')
         const live = await visit(page, articlePath(article, 'fr'))
-        expect(live.text).not.toContain(`Brouillon ${marker}`)
+        expect(live.text).toContain(`Corrigé ${marker}`)
+        expect(live.text).not.toContain(`En ligne ${marker}`)
       })
     }
   )

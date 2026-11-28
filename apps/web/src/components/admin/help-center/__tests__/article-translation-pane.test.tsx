@@ -127,6 +127,28 @@ describe('a language with no version', () => {
   })
 })
 
+describe('a translation started from the main text, saved, then deleted', () => {
+  it('shows the missing-language screen again', async () => {
+    fns.getArticleTranslationFn.mockResolvedValueOnce(null)
+    renderPane(entry({ locale: 'es', status: 'untranslated', title: null, updatedAt: null }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Start from the English text' }))
+    fireEvent.change(await screen.findByLabelText('Article title'), {
+      target: { value: 'Configura tu cuenta' },
+    })
+    fns.getArticleTranslationFn.mockResolvedValue({
+      ...row,
+      locale: 'es',
+      title: 'Configura tu cuenta',
+      status: 'draft',
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete translation' }))
+    fns.getArticleTranslationFn.mockResolvedValue(null)
+    await waitFor(() => expect(fns.deleteArticleTranslationFn).toHaveBeenCalled())
+    expect(await screen.findByText('This article is not in Español yet')).toBeTruthy()
+  })
+})
+
 describe('an existing translation', () => {
   it('that needs an update offers show changes, AI and mark as up to date', async () => {
     renderPane(entry({ needsUpdate: true }))

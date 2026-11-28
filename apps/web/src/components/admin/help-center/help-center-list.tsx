@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo, startTransition } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { InboxLayout } from '@/components/admin/feedback/inbox-layout'
 import { HelpCenterFiltersPanel } from './help-center-filters'
@@ -12,7 +12,6 @@ import type { HelpCenterStatusFilter } from './use-help-center-filters'
 import type { CategoryActions, TreeCategory } from './help-center-category-tree'
 import { useDeleteArticle, useDeleteCategory } from '@/lib/client/mutations/help-center'
 import { helpCenterQueries } from '@/lib/client/queries/help-center'
-import { settingsQueries } from '@/lib/client/queries/settings'
 import { collectDescendantIds } from '@/lib/shared/help-center-tree'
 import { Route } from '@/routes/admin/help-center'
 import type { KbArticleId, KbCategoryId } from '@quackback/ids'
@@ -34,8 +33,19 @@ export function HelpCenterList() {
   const deleteCategoryMutation = useDeleteCategory()
 
   const { data: allCategories = [] } = useQuery(helpCenterQueries.categories())
-  const { data: helpCenterConfig } = useQuery(settingsQueries.helpCenterConfig())
-  const hasExtraLanguages = (helpCenterConfig?.locales.additional.length ?? 0) > 0
+  // The finder's own list query (same key, so no extra request) says whether
+  // the help center has more than one language.
+  const { data: firstPage } = useInfiniteQuery({
+    ...helpCenterQueries.articleList({
+      categoryId: filters.category,
+      status: filters.status === 'all' ? undefined : filters.status,
+      search: filters.search,
+      sort: filters.sort,
+      languages: filters.languages,
+    }),
+    enabled: false,
+  })
+  const hasExtraLanguages = firstPage?.pages[0]?.languagesOffered ?? false
 
   // Keyboard "/" to focus search
   useEffect(() => {

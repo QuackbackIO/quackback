@@ -1,12 +1,31 @@
 import { Link } from '@tanstack/react-router'
-import { LOCALE_NATIVE_NAMES } from '@/lib/shared/locale-names'
-import type { SupportedLocale } from '@/lib/shared/i18n'
 import type { TranslationCheckProblem } from '@/lib/server/db'
 import { cn } from '@/lib/shared/utils'
 
+/**
+ * Each product language named in itself. The same names as the shared names
+ * table (a test keeps them equal), kept here so the help center editor does
+ * not turn that table into a chunk of its own that the settings pages load.
+ */
+export const EDITOR_LANGUAGE_NAMES: Record<string, string> = {
+  en: 'English',
+  de: 'Deutsch',
+  fr: 'Français',
+  es: 'Español',
+  ar: 'العربية',
+  ru: 'Русский',
+  'pt-br': 'Português (Brasil)',
+  'zh-cn': '简体中文',
+  'zh-tw': '繁體中文',
+  nl: 'Nederlands',
+  pl: 'Polski',
+  th: 'ภาษาไทย',
+  uk: 'Українська',
+}
+
 /** A language's name in itself, or its code when the product does not name it. */
 export function languageName(locale: string): string {
-  return LOCALE_NATIVE_NAMES[locale as SupportedLocale] ?? locale
+  return EDITOR_LANGUAGE_NAMES[locale] ?? locale
 }
 
 /** What the language bar shows for one language. */
