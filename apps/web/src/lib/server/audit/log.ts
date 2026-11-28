@@ -191,6 +191,14 @@ export type AuditEventType =
   // Device sign-in (RFC 8628): a person approved or denied a headless client's code.
   | 'oauth.device.approved'
   | 'oauth.device.denied'
+  // A connection started or stopped syncing one of its destinations (a GitHub
+  // repository); the target is the destination.
+  | 'integration.destination.added'
+  | 'integration.destination.removed'
+  // An account on a provider (a GitHub user) was matched to a teammate, or the
+  // match was removed; the target is the mapping.
+  | 'integration.user_mapping.added'
+  | 'integration.user_mapping.removed'
   // An MCP client identified by its metadata document URL (CIMD): created on
   // first use, and refreshed when a re-fetched document changed its name or
   // redirect URIs.

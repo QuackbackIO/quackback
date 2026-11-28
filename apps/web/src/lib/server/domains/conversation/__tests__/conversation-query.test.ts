@@ -617,6 +617,12 @@ describe('sortDescriptorFor', () => {
       primary: 'slaDueAt',
       direction: 'asc',
     })
+    // The linked customer ticket's due date, soonest first (NULLS LAST and
+    // the keyset cursor are proven in conversation-linked-ticket-due.db.test.ts).
+    expect(sortDescriptorFor('due')).toEqual({
+      primary: 'linkedTicketDueAt',
+      direction: 'asc',
+    })
   })
 
   it('defaults to the recent sort', () => {
