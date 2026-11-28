@@ -10,8 +10,8 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { articleTranslationLocaleSchema } from '@/lib/shared/schemas/help-center'
 import type { KbArticleId } from '@quackback/ids'
 
+/** The checks every change to one language makes after the caller's own auth check. */
 async function editableLanguage(data: { articleId: string; locale: string }) {
-  await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
   const [{ assertHelpCenterLocaleEditable }, { getArticleLocale, assertNotOwnLanguage }] =
     await Promise.all([
       import('@/lib/server/domains/plan-limits/plan-limits.locales'),
@@ -90,6 +90,7 @@ export const getArticleTranslationFn = createServerFn({ method: 'GET' })
 export const markArticleTranslationCurrentFn = createServerFn({ method: 'POST' })
   .validator(articleTranslationLocaleSchema)
   .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
     const articleId = await editableLanguage(data)
     const { markArticleTranslationCurrent } =
       await import('@/lib/server/domains/help-center/help-center-translation-versions.service')
@@ -100,6 +101,7 @@ export const markArticleTranslationCurrentFn = createServerFn({ method: 'POST' }
 export const publishArticleTranslationUpdateFn = createServerFn({ method: 'POST' })
   .validator(articleTranslationLocaleSchema)
   .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
     const articleId = await editableLanguage(data)
     const { publishPendingTranslationUpdate } =
       await import('@/lib/server/domains/help-center/help-center-translation-versions.service')
@@ -110,6 +112,7 @@ export const publishArticleTranslationUpdateFn = createServerFn({ method: 'POST'
 export const discardArticleTranslationUpdateFn = createServerFn({ method: 'POST' })
   .validator(articleTranslationLocaleSchema)
   .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
     const articleId = await editableLanguage(data)
     const { discardPendingTranslationUpdate } =
       await import('@/lib/server/domains/help-center/help-center-translation-versions.service')
@@ -134,6 +137,7 @@ export const getArticleTranslationChangesFn = createServerFn({ method: 'GET' })
 export const requestArticleAiTranslationFn = createServerFn({ method: 'POST' })
   .validator(articleTranslationLocaleSchema)
   .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
     const articleId = await editableLanguage(data)
     const { runArticleTranslation } =
       await import('@/lib/server/domains/help-center/help-center-auto-translate.service')
