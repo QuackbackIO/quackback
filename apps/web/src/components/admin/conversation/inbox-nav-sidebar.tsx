@@ -332,7 +332,9 @@ function ScopeFilterSection({
                 className="h-2.5 w-2.5 shrink-0 rounded-full"
                 style={{ backgroundColor: r.color }}
               />
-              <span className="min-w-0 flex-1 truncate text-start">{r.name}</span>
+              <span dir="auto" className="min-w-0 flex-1 truncate text-start">
+                {r.name}
+              </span>
               {showCounts && (
                 <span className="shrink-0 text-[11px] text-muted-foreground">{r.count}</span>
               )}
@@ -377,7 +379,9 @@ function ScopeMenuSection({
               className="h-2.5 w-2.5 shrink-0 rounded-full"
               style={{ backgroundColor: r.color }}
             />
-            <span className="min-w-0 flex-1 truncate">{r.name}</span>
+            <span dir="auto" className="min-w-0 flex-1 truncate">
+              {r.name}
+            </span>
             {showCounts && (
               <span className="shrink-0 text-xs text-muted-foreground">{r.count}</span>
             )}
@@ -495,7 +499,9 @@ function ViewsFilterSection({
                   ) : (
                     <FunnelIcon className={cn('size-4 shrink-0', active && 'text-primary')} />
                   )}
-                  <span className="min-w-0 flex-1 truncate">{v.name}</span>
+                  <span dir="auto" className="min-w-0 flex-1 truncate">
+                    {v.name}
+                  </span>
                 </button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -925,7 +931,9 @@ export function InboxScopeMenu({
                   ) : (
                     <FunnelIcon className="h-4 w-4" />
                   )}
-                  <span className="min-w-0 flex-1 truncate">{v.name}</span>
+                  <span dir="auto" className="min-w-0 flex-1 truncate">
+                    {v.name}
+                  </span>
                 </DropdownMenuItem>
               )
             })}

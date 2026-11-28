@@ -606,7 +606,7 @@ export const ConversationRow = memo(function ConversationRow({
         />
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
-            <span className="truncate text-sm font-medium">
+            <span dir="auto" className="truncate text-sm font-medium">
               {c.visitor.displayName ?? intl.formatMessage(VISITOR)}
             </span>
             <span className="flex shrink-0 items-center gap-1.5">
@@ -638,7 +638,7 @@ export const ConversationRow = memo(function ConversationRow({
             </p>
           ) : (
             <div className="mt-0.5 flex items-center justify-between gap-2">
-              <p className="min-w-0 truncate text-xs text-muted-foreground">
+              <p dir="auto" className="min-w-0 truncate text-xs text-muted-foreground">
                 {c.lastMessagePreview != null
                   ? previewText(intl, c.lastMessagePreview)
                   : (c.subject ?? intl.formatMessage(NO_MESSAGES))}
@@ -703,7 +703,9 @@ const TicketRow = memo(function TicketRow({
         <TicketTypeGlyph type={t.type} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
-            <span className="truncate text-sm font-medium">{t.title}</span>
+            <span dir="auto" className="truncate text-sm font-medium">
+              {t.title}
+            </span>
             <span className="flex shrink-0 items-center gap-1.5">
               <TicketAssigneeGlyph assignee={t.assignee} />
               {item.unreadCount > 0 && (
@@ -718,7 +720,7 @@ const TicketRow = memo(function TicketRow({
             <TicketStatusChip status={t.status} />
           </div>
           <div className="mt-0.5 flex items-center justify-between gap-2">
-            <p className="min-w-0 truncate text-xs text-muted-foreground">
+            <p dir="auto" className="min-w-0 truncate text-xs text-muted-foreground">
               {t.lastMessagePreview != null
                 ? previewText(intl, t.lastMessagePreview)
                 : intl.formatMessage(NO_MESSAGES)}

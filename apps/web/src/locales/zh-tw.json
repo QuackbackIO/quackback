@@ -3770,5 +3770,7 @@
   "admin.inbox.labels.ticketStage.received": "已收到",
   "admin.inbox.labels.ticketStage.inProgress": "進行中",
   "admin.inbox.labels.ticketStage.awaitingRequester": "等待你的回覆",
-  "admin.inbox.labels.ticketStage.resolved": "已解決"
+  "admin.inbox.labels.ticketStage.resolved": "已解決",
+  "admin.inbox.conversationAttributesEditor.setBy": "設定者：{src, select, teammate {團隊成員} workflow {工作流程} ai {AI} customer {客戶} other {{src}}}",
+  "admin.inbox.inbox.missingRequired": "{count} 個對話缺少必填屬性。"
 }

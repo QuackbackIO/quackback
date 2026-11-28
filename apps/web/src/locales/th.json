@@ -3770,5 +3770,7 @@
   "admin.inbox.labels.ticketStage.received": "ได้รับแล้ว",
   "admin.inbox.labels.ticketStage.inProgress": "กำลังดำเนินการ",
   "admin.inbox.labels.ticketStage.awaitingRequester": "รอการตอบกลับจากคุณ",
-  "admin.inbox.labels.ticketStage.resolved": "แก้ไขแล้ว"
+  "admin.inbox.labels.ticketStage.resolved": "แก้ไขแล้ว",
+  "admin.inbox.conversationAttributesEditor.setBy": "ตั้งค่าโดย {src, select, teammate {เพื่อนร่วมทีม} workflow {เวิร์กโฟลว์} ai {AI} customer {ลูกค้า} other {{src}}}",
+  "admin.inbox.inbox.missingRequired": "การสนทนา {count} รายการขาดแอตทริบิวต์ที่จำเป็น"
 }

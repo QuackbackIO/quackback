@@ -1475,7 +1475,14 @@ function InboxPage() {
             isMissingRequiredAttributesMessage(f.reason)
           ).length
           setCloseBlocked([
-            `${count} ${count === 1 ? 'conversation is' : 'conversations are'} missing required attributes.`,
+            intl.formatMessage(
+              {
+                id: 'admin.inbox.inbox.missingRequired',
+                defaultMessage:
+                  '{count, plural, one {# conversation is} other {# conversations are}} missing required attributes.',
+              },
+              { count }
+            ),
             ...blocked,
           ])
         }
@@ -1539,6 +1546,7 @@ function InboxPage() {
     statusTicketMutation,
     runSolo,
     refreshInbox,
+    intl,
   ])
 
   // Reopen stays conversation-only for M2 — the ticket capability matrix (§2.5)

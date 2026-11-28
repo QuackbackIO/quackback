@@ -3770,5 +3770,7 @@
   "admin.inbox.labels.ticketStage.received": "Отримано",
   "admin.inbox.labels.ticketStage.inProgress": "Виконується",
   "admin.inbox.labels.ticketStage.awaitingRequester": "Очікує на вашу відповідь",
-  "admin.inbox.labels.ticketStage.resolved": "Вирішено"
+  "admin.inbox.labels.ticketStage.resolved": "Вирішено",
+  "admin.inbox.conversationAttributesEditor.setBy": "Задано: {src, select, teammate {колега} workflow {сценарій} ai {ШІ} customer {клієнт} other {{src}}}",
+  "admin.inbox.inbox.missingRequired": "{count, plural, one {У # розмові} few {У # розмовах} many {У # розмовах} other {У # розмови}} не заповнено обов’язкові атрибути."
 }

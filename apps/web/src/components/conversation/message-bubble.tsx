@@ -685,7 +685,10 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
           ) : (
             <>
               {hasBody && (
+                // Text people wrote takes its own direction (dir="auto"), so an
+                // English message reads left to right on a right-to-left page.
                 <div
+                  dir="auto"
                   className={cn(
                     jumbo
                       ? 'max-w-full'

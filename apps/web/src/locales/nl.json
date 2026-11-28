@@ -3770,5 +3770,7 @@
   "admin.inbox.labels.ticketStage.received": "Ontvangen",
   "admin.inbox.labels.ticketStage.inProgress": "Bezig",
   "admin.inbox.labels.ticketStage.awaitingRequester": "Wacht op je antwoord",
-  "admin.inbox.labels.ticketStage.resolved": "Opgelost"
+  "admin.inbox.labels.ticketStage.resolved": "Opgelost",
+  "admin.inbox.conversationAttributesEditor.setBy": "Ingesteld door {src, select, teammate {een teamlid} workflow {een workflow} ai {AI} customer {de klant} other {{src}}}",
+  "admin.inbox.inbox.missingRequired": "{count, plural, one {# gesprek mist} other {# gesprekken missen}} verplichte kenmerken."
 }

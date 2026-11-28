@@ -6,6 +6,7 @@
  * envelope. Renders nothing while no definitions exist so the panel stays
  * clean for workspaces that haven't adopted attributes.
  */
+import type { IntlShape } from 'react-intl'
 import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { memo, useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -46,9 +47,18 @@ import { toastError } from '@/lib/client/error-notice'
 const NONE = '__none__'
 
 /** Human hint for where the current value came from. */
-function provenanceTitle(raw: unknown): string | undefined {
+function provenanceTitle(intl: IntlShape, raw: unknown): string | undefined {
   const src = readAttributeValue(raw)?.src
-  return src ? `Set by ${src}` : undefined
+  return src
+    ? intl.formatMessage(
+        {
+          id: 'admin.inbox.conversationAttributesEditor.setBy',
+          defaultMessage:
+            'Set by {src, select, teammate {teammate} workflow {workflow} ai {ai} customer {customer} other {{src}}}',
+        },
+        { src }
+      )
+    : undefined
 }
 
 /** Commit-on-blur/Enter text or number input (avoids a write per keystroke). */
@@ -248,7 +258,7 @@ export const ConversationAttributesEditor = memo(function ConversationAttributes
         const raw = customAttributes[def.key]
         const isAiSet = readAttributeValue(raw)?.src === 'ai'
         return (
-          <div key={def.id} title={isAiSet ? undefined : provenanceTitle(raw)}>
+          <div key={def.id} title={isAiSet ? undefined : provenanceTitle(intl, raw)}>
             <Row label={def.label} align="center">
               <div className="flex items-center gap-1.5">
                 {isAiSet && (

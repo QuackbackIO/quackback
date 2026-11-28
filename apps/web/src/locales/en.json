@@ -3770,5 +3770,7 @@
   "admin.inbox.labels.ticketStage.received": "Received",
   "admin.inbox.labels.ticketStage.inProgress": "In progress",
   "admin.inbox.labels.ticketStage.awaitingRequester": "Awaiting your reply",
-  "admin.inbox.labels.ticketStage.resolved": "Resolved"
+  "admin.inbox.labels.ticketStage.resolved": "Resolved",
+  "admin.inbox.conversationAttributesEditor.setBy": "Set by {src, select, teammate {teammate} workflow {workflow} ai {ai} customer {customer} other {{src}}}",
+  "admin.inbox.inbox.missingRequired": "{count, plural, one {# conversation is} other {# conversations are}} missing required attributes."
 }

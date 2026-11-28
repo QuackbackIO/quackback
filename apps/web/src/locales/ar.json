@@ -3770,5 +3770,7 @@
   "admin.inbox.labels.ticketStage.received": "تم الاستلام",
   "admin.inbox.labels.ticketStage.inProgress": "قيد التنفيذ",
   "admin.inbox.labels.ticketStage.awaitingRequester": "بانتظار ردك",
-  "admin.inbox.labels.ticketStage.resolved": "تم الحل"
+  "admin.inbox.labels.ticketStage.resolved": "تم الحل",
+  "admin.inbox.conversationAttributesEditor.setBy": "عيّنه {src, select, teammate {زميل} workflow {سير عمل} ai {الذكاء الاصطناعي} customer {العميل} other {{src}}}",
+  "admin.inbox.inbox.missingRequired": "{count, plural, zero {لا توجد محادثات تنقصها} one {محادثة واحدة تنقصها} two {محادثتان تنقصهما} few {# محادثات تنقصها} many {# محادثة تنقصها} other {# محادثة تنقصها}} سمات مطلوبة."
 }
