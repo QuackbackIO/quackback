@@ -285,7 +285,14 @@ export interface TranslationSourceText {
 
 /** A problem the translation checks found, with what it concerns. */
 export interface TranslationCheckProblem {
-  code: 'empty' | 'code_block_changed' | 'link_missing' | 'image_missing' | 'headings_changed'
+  code:
+    | 'empty'
+    | 'code_block_changed'
+    | 'link_missing'
+    | 'image_missing'
+    | 'embed_missing'
+    | 'headings_changed'
+    | 'term_changed'
   /** The code, link or image target, or heading outline, the problem is about. */
   detail?: string
 }

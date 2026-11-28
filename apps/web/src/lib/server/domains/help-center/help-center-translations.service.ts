@@ -13,6 +13,7 @@ import {
   helpCenterCategories,
   helpCenterCategoryTranslations,
   type TiptapContent,
+  type TranslationCheckResult,
 } from '@/lib/server/db'
 import type { KbArticleId, KbCategoryId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
@@ -97,6 +98,8 @@ export interface UpsertArticleTranslationInput {
    * the article when not given. An existing translation keeps its own.
    */
   source?: { revision: number; text: TranslationSourceText }
+  /** The checks on an AI draft (auto-translate's write only). */
+  checkResult?: TranslationCheckResult | null
 }
 
 /** The source a new translation records: the given one, or the article as it is now. */
@@ -213,6 +216,7 @@ export async function writeGuardedArticleTranslation(
     contentJson: input.contentJson ?? null,
     sourceRevision: source.revision,
     sourceText: source.text,
+    checkResult: input.checkResult ?? null,
   }
   const insert = db.insert(helpCenterArticleTranslations).values(values)
   const rows =

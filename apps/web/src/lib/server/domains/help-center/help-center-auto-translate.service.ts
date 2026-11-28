@@ -1,11 +1,14 @@
 /**
- * Auto-translate (domains/languages §H3, fast-follow). On publish of a
- * base-locale article, when helpCenterConfig.autoTranslate.enabled, one job
- * per enabled additional locale is queued through the existing feedback-ai
- * BullMQ queue (a second dedicated worker for one more rate-limit-sensitive
- * OpenAI-compatible call isn't warranted). The job translates the article
- * via the BYOK AI client and writes the result as a DRAFT translation --
- * never auto-published -- so a human always reviews before it goes live.
+ * AI translation of one article into one language. A missing language gets a
+ * new draft; an existing translation that is behind its article gets an
+ * update that waits beside its live text. AI never publishes and never
+ * changes live text; a person reviews and publishes.
+ *
+ * Before the model sees the body, code, link and image targets, placeholders
+ * and rich nodes are swapped for tokens (help-center-translation-text.ts);
+ * after it answers, the result is checked (help-center-translation-checks.ts)
+ * and the outcome stored with it. Queueing lives in
+ * help-center-translation-upkeep.ts.
  */
 import { chat } from '@tanstack/ai'
 import { openaiCompatibleText } from '@tanstack/ai-openai/compatible'
@@ -18,17 +21,23 @@ import {
 import { createUsageLoggingMiddleware } from '@/lib/server/domains/ai/usage-middleware'
 import { getAiBudgetStatus } from '@/lib/server/domains/ai/ai-budget'
 import { getChatModel } from '@/lib/server/domains/ai/models'
-import { markdownToTiptapJson } from '@/lib/server/markdown-tiptap'
+import { markdownToTiptapJson, projectContentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { getHelpCenterConfig } from '@/lib/server/domains/settings/settings.service'
+import type { GlossaryTranslation } from '@/lib/server/domains/settings/settings.types'
 import { isFeatureLive } from '@/lib/server/domains/plan-limits/plan-limits.service'
-import { getArticleById } from './help-center.article.service'
+import type { TiptapContent, TranslationCheckResult } from '@/lib/server/db'
 import {
   getArticleTranslation,
   writeGuardedArticleTranslation,
 } from './help-center-translations.service'
+import {
+  getArticleSourceForTranslation,
+  writePendingTranslationUpdate,
+} from './help-center-translation-versions.service'
+import { prepareTranslationText, restoreTranslationText } from './help-center-translation-text'
+import { checkTranslation } from './help-center-translation-checks'
 import { logger } from '@/lib/server/logger'
 import type { KbArticleId } from '@quackback/ids'
-import type { HelpCenterArticleWithCategory } from './help-center.types'
 import { oneShotThreadId } from '@/lib/server/domains/ai/thread-id'
 
 const log = logger.child({ component: 'help-center-auto-translate' })
@@ -41,8 +50,8 @@ const TranslationResultSchema = z.object({
 
 /**
  * Builds the chat messages for a translation call. Pure so the prompt shape
- * (protected-terms instruction, JSON contract) is unit-testable without a
- * live AI client.
+ * (glossary instructions, token rule, JSON contract) is unit-testable without
+ * a live AI client.
  */
 export function buildTranslationPrompt(input: {
   title: string
@@ -50,16 +59,24 @@ export function buildTranslationPrompt(input: {
   content: string
   locale: string
   protectedTerms: string[]
+  fixedTranslations?: readonly GlossaryTranslation[]
 }): { system: string; user: string } {
   const glossaryLine =
     input.protectedTerms.length > 0
       ? `\n\nNever translate these terms; keep them exactly as written: ${input.protectedTerms.join(', ')}.`
       : ''
+  const fixed = (input.fixedTranslations ?? []).filter((t) => t.term && t.translation)
+  const fixedLine =
+    fixed.length > 0
+      ? `\n\nAlways translate these terms exactly this way:\n${fixed.map((t) => `- ${t.term} -> ${t.translation}`).join('\n')}`
+      : ''
 
   const system = `You are a professional technical translator localizing help-center articles.
 Translate the given title, description, and Markdown content into the locale "${input.locale}".
 Preserve all Markdown formatting (headings, lists, links, code blocks) exactly -- translate
-only the human-readable text, never code, URLs, or Markdown syntax.${glossaryLine}
+only the human-readable text, never code, URLs, or Markdown syntax. Translate link text and
+image alt text. Keep every token written like ⟦C0⟧, ⟦I0⟧, ⟦U0⟧, ⟦P0⟧ or ⟦N0⟧ exactly as it
+is, once, in the matching place.${glossaryLine}${fixedLine}
 
 Return strict JSON only:
 {
@@ -72,7 +89,7 @@ Example output:
 {
   "title": "Exporter vos données",
   "description": "Comment exporter les données de votre espace de travail.",
-  "content": "# Exporter vos données\\n\\nOuvrez **Paramètres** et choisissez *Exporter*."
+  "content": "# Exporter vos données\\n\\nOuvrez **Paramètres** et choisissez *Exporter* ⟦I0⟧."
 }`
 
   const user = JSON.stringify({
@@ -107,25 +124,47 @@ export interface AutoTranslatePause {
   pausedUntil: Date
 }
 
+/** What one translation run did. */
+export type ArticleTranslationOutcome =
+  | { kind: 'draft'; check: TranslationCheckResult }
+  | { kind: 'update'; check: TranslationCheckResult }
+  | { kind: 'paused'; pausedUntil: Date }
+  | {
+      kind: 'skipped'
+      reason:
+        'unavailable' | 'held' | 'not_found' | 'current' | 'update_waiting' | 'changed' | 'failed'
+    }
+
+export interface TranslateArticleOptions {
+  guard?: ParkedTranslationGuard
+  /**
+   * 'auto' (the queue) leaves any update already waiting for the current
+   * version. 'request' (a person's "Update with AI") replaces one that failed
+   * its checks.
+   */
+  mode?: 'auto' | 'request'
+}
+
 /**
- * The job handler: translate one article into one locale, write a draft.
+ * Translate one article into one language: a draft for a missing language,
+ * a waiting update for one behind its article.
  *
  * Checks the AI allowance before the model call, so a used-up allowance costs
  * nothing and writes nothing; the caller parks the item and retries it.
  */
-export async function translateArticleForLocale(
+export async function runArticleTranslation(
   articleId: KbArticleId,
   locale: string,
-  opts: { guard?: ParkedTranslationGuard } = {}
-): Promise<AutoTranslatePause | undefined> {
+  opts: TranslateArticleOptions = {}
+): Promise<ArticleTranslationOutcome> {
   if (!(await isFeatureLive('aiArticleTranslation'))) {
     log.debug({ article_id: articleId, locale }, 'auto-translate skipped: plan excludes it')
-    return
+    return { kind: 'skipped', reason: 'unavailable' }
   }
   const model = getChatModel('helpCenterTranslate')
   if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) || !model) {
     log.debug({ article_id: articleId, locale }, 'auto-translate skipped: AI not configured')
-    return
+    return { kind: 'skipped', reason: 'unavailable' }
   }
 
   const budget = await getAiBudgetStatus()
@@ -134,22 +173,31 @@ export async function translateArticleForLocale(
       { article_id: articleId, locale, resume_at: budget.window.end.toISOString() },
       'auto-translate paused: AI allowance used up'
     )
-    return { pausedUntil: budget.window.end }
+    return { kind: 'paused', pausedUntil: budget.window.end }
   }
 
-  // A job that was parked must not replace a translation a person changed
-  // while it waited. Checked here to save the model call; the write itself
-  // is conditional as well.
+  // A job that was parked does not act on a translation a person changed
+  // while it waited; the catch-up queues it again if it is still behind.
   if (opts.guard && !(await translationUnchanged(articleId, locale, opts.guard))) {
     log.info({ article_id: articleId, locale }, 'auto-translate skipped: translation changed')
-    return
+    return { kind: 'skipped', reason: 'changed' }
   }
 
-  // AI only fills a missing language. A version that exists, written by a
-  // person or by an earlier run, is never replaced here.
-  if (await getArticleTranslation(articleId, locale)) {
-    log.info({ article_id: articleId, locale }, 'auto-translate skipped: a version exists')
-    return
+  const [source, existing] = await Promise.all([
+    getArticleSourceForTranslation(articleId),
+    getArticleTranslation(articleId, locale),
+  ])
+  if (!source) return { kind: 'skipped', reason: 'not_found' }
+  if (existing) {
+    if (existing.sourceRevision >= source.revision) {
+      return { kind: 'skipped', reason: 'current' }
+    }
+    const waiting = existing.pendingSourceRevision !== null && existing.pendingTitle !== null
+    const waitingCurrent = waiting && existing.pendingSourceRevision! >= source.revision
+    const waitingOk = existing.checkResult?.ok !== false
+    if (waitingCurrent && (opts.mode !== 'request' || waitingOk)) {
+      return { kind: 'skipped', reason: 'update_waiting' }
+    }
   }
 
   const helpCenterConfig = await getHelpCenterConfig()
@@ -158,17 +206,20 @@ export async function translateArticleForLocale(
     await import('@/lib/server/domains/plan-limits/plan-limits.locales')
   if ((await heldHelpCenterLocales(helpCenterConfig.locales?.additional ?? [])).includes(locale)) {
     log.info({ article_id: articleId, locale }, 'auto-translate skipped: language held by the plan')
-    return
+    return { kind: 'skipped', reason: 'held' }
   }
   const protectedTerms = helpCenterConfig.autoTranslate?.protectedTerms ?? []
+  const fixedTranslations = helpCenterConfig.autoTranslate?.fixedTranslations?.[locale] ?? []
 
-  const article = await getArticleById(articleId)
+  const sourceBody: TiptapContent = source.contentJson ?? markdownToTiptapJson(source.text.content)
+  const prepared = prepareTranslationText(sourceBody)
   const { system, user } = buildTranslationPrompt({
-    title: article.title,
-    description: article.description,
-    content: article.content,
+    title: source.text.title,
+    description: source.text.description,
+    content: prepared.markdown,
     locale,
     protectedTerms,
+    fixedTranslations,
   })
 
   let parsed: z.infer<typeof TranslationResultSchema>
@@ -194,70 +245,69 @@ export async function translateArticleForLocale(
     })
   } catch (err) {
     log.error({ err, article_id: articleId, locale }, 'auto-translate: unparseable AI response')
-    return
+    return { kind: 'skipped', reason: 'failed' }
   }
   if (!parsed.title || !parsed.content) {
     log.error({ article_id: articleId, locale }, 'auto-translate: incomplete AI response')
-    return
+    return { kind: 'skipped', reason: 'failed' }
   }
 
+  const restored = restoreTranslationText(parsed.content, prepared)
+  const check = checkTranslation({
+    source: { title: source.text.title, body: sourceBody },
+    result: { title: parsed.title, body: restored.contentJson },
+    protectedTerms,
+  })
   const result = {
-    articleId,
-    locale,
     title: parsed.title,
-    description: parsed.description || undefined,
-    content: parsed.content,
-    contentJson: markdownToTiptapJson(parsed.content),
+    description: parsed.description || null,
+    content: projectContentJsonToMarkdown(
+      restored.contentJson,
+      restored.markdown.replace(/⟦\s*N\s*\d+\s*⟧/g, '')
+    ),
+    contentJson: restored.contentJson,
   }
-  if (opts.guard) {
-    // Conditional in the same statement, so a change saved after the check
-    // above but before this write still wins.
-    const written = await writeGuardedArticleTranslation(result, opts.guard.translationUpdatedAt)
+
+  if (existing) {
+    const written = await writePendingTranslationUpdate(articleId, locale, {
+      ...result,
+      sourceRevision: source.revision,
+      sourceText: source.text,
+      check,
+    })
     if (!written) {
-      log.info({ article_id: articleId, locale }, 'auto-translate skipped: translation changed')
-      return
+      log.info({ article_id: articleId, locale }, 'auto-translate skipped: translation current')
+      return { kind: 'skipped', reason: 'current' }
     }
-  } else if (!(await writeGuardedArticleTranslation(result, null))) {
-    // A person saved a version while the AI call ran; theirs stays.
-    log.info({ article_id: articleId, locale }, 'auto-translate skipped: a version exists')
-    return
+    log.info({ article_id: articleId, locale, ok: check.ok }, 'auto-translate: update waiting')
+    return { kind: 'update', check }
   }
-  log.info({ article_id: articleId, locale }, 'auto-translate: draft translation written')
+
+  // Insert only: a version a person saved while the AI call ran stays.
+  const written = await writeGuardedArticleTranslation(
+    {
+      articleId,
+      locale,
+      ...result,
+      source: { revision: source.revision, text: source.text },
+      checkResult: check,
+    },
+    null
+  )
+  if (!written) {
+    log.info({ article_id: articleId, locale }, 'auto-translate skipped: a version exists')
+    return { kind: 'skipped', reason: 'changed' }
+  }
+  log.info({ article_id: articleId, locale, ok: check.ok }, 'auto-translate: draft written')
+  return { kind: 'draft', check }
 }
 
-/**
- * Called from publishArticle(). Fire-and-forget from the caller's
- * perspective -- enqueuing failures are logged, not thrown, so a translation
- * outage never blocks publishing the base article.
- */
-export async function queueAutoTranslateOnPublish(
-  article: HelpCenterArticleWithCategory
-): Promise<void> {
-  try {
-    const helpCenterConfig = await getHelpCenterConfig()
-    if (!helpCenterConfig.autoTranslate?.enabled) return
-    if (!(await isFeatureLive('aiArticleTranslation'))) return
-    // Every language the help center offers but the one the article is
-    // written in: an article left in a former main language gets a draft in
-    // the main language, and none in its own.
-    const main = helpCenterConfig.locales?.default
-    const own = article.locale ?? main
-    const targets = [main, ...(helpCenterConfig.locales?.additional ?? [])].filter(
-      (locale): locale is string => !!locale && locale !== own
-    )
-    if (targets.length === 0) return
-
-    const { enqueueHelpCenterTranslateJob } = await import('./help-center-translate-queue')
-    await Promise.all(
-      targets.map((locale) =>
-        enqueueHelpCenterTranslateJob({
-          type: 'translate-article',
-          articleId: article.id,
-          locale,
-        })
-      )
-    )
-  } catch (err) {
-    log.error({ err, article_id: article.id }, 'failed to queue auto-translate jobs')
-  }
+/** The queue's entry point: the pause to park on, or nothing. */
+export async function translateArticleForLocale(
+  articleId: KbArticleId,
+  locale: string,
+  opts: TranslateArticleOptions = {}
+): Promise<AutoTranslatePause | undefined> {
+  const outcome = await runArticleTranslation(articleId, locale, opts)
+  return outcome.kind === 'paused' ? { pausedUntil: outcome.pausedUntil } : undefined
 }

@@ -68,6 +68,21 @@ export function nextTextRevision(next: {
   return sql`CASE WHEN ${or(...changes)} THEN ${t.textRevision} + 1 ELSE ${t.textRevision} END`
 }
 
+/** True when an article update writes any of the text translations are made from. */
+export function touchesTranslatedText(input: {
+  title?: unknown
+  description?: unknown
+  content?: unknown
+  contentJson?: unknown
+}): boolean {
+  return (
+    input.title !== undefined ||
+    input.description !== undefined ||
+    input.content !== undefined ||
+    input.contentJson !== undefined
+  )
+}
+
 /** The revision and text of an article, or null when there is no live article. */
 export async function getArticleSource(
   articleId: KbArticleId
@@ -78,6 +93,33 @@ export async function getArticleSource(
   })
   if (!row) return null
   return { revision: row.textRevision, text: sourceTextOf(row), locale: row.locale }
+}
+
+/** The article as a translation is made from it: revision, text and rich body. */
+export async function getArticleSourceForTranslation(articleId: KbArticleId): Promise<{
+  revision: number
+  text: TranslationSourceText
+  contentJson: TiptapContent | null
+  locale: string
+} | null> {
+  const row = await db.query.helpCenterArticles.findFirst({
+    where: and(eq(helpCenterArticles.id, articleId), isNull(helpCenterArticles.deletedAt)),
+    columns: {
+      textRevision: true,
+      title: true,
+      description: true,
+      content: true,
+      contentJson: true,
+      locale: true,
+    },
+  })
+  if (!row) return null
+  return {
+    revision: row.textRevision,
+    text: sourceTextOf(row),
+    contentJson: row.contentJson ?? null,
+    locale: row.locale,
+  }
 }
 
 /** An AI update waiting beside a translation's live text. */
