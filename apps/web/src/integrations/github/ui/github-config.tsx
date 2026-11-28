@@ -28,6 +28,8 @@ import {
   getGitHubChannelStatusFn,
   type GitHubRepo,
 } from '@/integrations/github/server/functions'
+import { GitHubRepositoryCard } from '@/integrations/github/ui/github-repository-card'
+import { useSetGitHubRepository } from '@/integrations/github/ui/use-github-repository'
 import { StatusSyncConfig } from '@/components/admin/settings/integrations/status-sync-config'
 import { TicketStatusSyncConfig } from '@/components/admin/settings/integrations/ticket-status-sync-config'
 import { OnDeleteConfig } from '@/components/admin/settings/integrations/on-delete-config'
@@ -65,6 +67,7 @@ export function GitHubConfig({
   enabled,
 }: GitHubConfigProps) {
   const updateMutation = useUpdateIntegration()
+  const repositoryMutation = useSetGitHubRepository()
   // The inbox channel's page has its own gate; the link shows only to whom it opens.
   const canOpenInboxChannel = useCanOpenSettingsPage('/admin/settings/channels/github')
   const [repos, setRepos] = useState<GitHubRepo[]>([])
@@ -108,9 +111,12 @@ export function GitHubConfig({
     updateMutation.mutate({ id: integrationId, enabled: checked })
   }
 
+  // The server moves the repository's webhook with the selection, so the
+  // choice goes through its own endpoint rather than a plain config write.
   const handleRepoChange = (ownerRepo: string) => {
+    const previous = selectedRepo
     setSelectedRepo(ownerRepo)
-    updateMutation.mutate({ id: integrationId, config: { channelId: ownerRepo } })
+    repositoryMutation.mutate(ownerRepo, { onError: () => setSelectedRepo(previous) })
   }
 
   const handleEventToggle = (eventId: string, checked: boolean) => {
@@ -125,7 +131,8 @@ export function GitHubConfig({
     })
   }
 
-  const saving = updateMutation.isPending
+  const saving = updateMutation.isPending || repositoryMutation.isPending
+  const saveError = updateMutation.error ?? repositoryMutation.error
   const inbox = inboxQuery.data
   const inboxAttention = !!inbox?.connected && (!!inbox.lastError || inbox.status !== 'active')
   const inboxBadge = !inbox?.connected
@@ -207,6 +214,7 @@ export function GitHubConfig({
             <p className="text-xs text-muted-foreground">
               New feedback issues will be created in this repository.
             </p>
+            {selectedRepo && <GitHubRepositoryCard repository={selectedRepo} />}
           </div>
 
           {saving && (
@@ -216,9 +224,9 @@ export function GitHubConfig({
             </div>
           )}
 
-          {updateMutation.isError && (
+          {saveError && (
             <div className="text-sm text-destructive">
-              {updateMutation.error?.message || 'Failed to save changes'}
+              {saveError.message || 'Failed to save changes'}
             </div>
           )}
         </div>

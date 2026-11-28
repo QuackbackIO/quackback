@@ -70,6 +70,7 @@ import {
   AssistantAnswer,
 } from '@/components/shared/conversation/assistant-turn'
 import { PendingActionCard } from '@/components/conversation/pending-action-card'
+import { MessageFileMenuItems } from '@/components/conversation/message-file-actions'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import type { MentionItemRef } from '@/components/ui/mention-extension'
 import {
@@ -375,6 +376,10 @@ interface AgentMessageBubbleProps {
   ticketProvenance?: boolean
   /** Retry a failed GitHub (thread-channel) send. */
   onRetryChannelDelivery?: (messageId: ConversationMessageId) => void
+  /** Author-only, like `canEdit`: add files to the sent message. */
+  onAddFiles?: (messageId: ConversationMessageId, files: File[]) => void
+  /** Author-only: remove the file at `index` (named `name`) from the message. */
+  onRemoveFile?: (messageId: ConversationMessageId, index: number, name: string) => void
 }
 
 interface VisitorMessageBubbleProps {
@@ -525,12 +530,16 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
   blockState,
   ticketProvenance = false,
   onRetryChannelDelivery,
+  onAddFiles,
+  onRemoveFile,
 }: AgentMessageBubbleProps) {
   // Keep the hover toolbar visible while its emoji popover or overflow menu is
   // open (the pointer leaves the row to interact with the portal'd content).
   const [emojiOpen, setEmojiOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [editing, setEditing] = useState(false)
+  // Outlives the overflow menu, which unmounts on close.
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // System events (e.g. "assigned to …") are status notices, not messages:
   // centered, no avatar, no actions.
@@ -790,6 +799,13 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
                         <PencilIcon className="h-4 w-4" /> Edit message
                       </DropdownMenuItem>
                     )}
+                    {canEdit && onAddFiles && onRemoveFile && (
+                      <MessageFileMenuItems
+                        attachments={message.attachments}
+                        onAddFiles={() => fileInputRef.current?.click()}
+                        onRemoveFile={(index, name) => onRemoveFile(message.id, index, name)}
+                      />
+                    )}
                     {canDelete && (
                       <DropdownMenuItem variant="destructive" onClick={() => onDelete(message.id)}>
                         <TrashIcon className="h-4 w-4" /> Delete
@@ -816,6 +832,21 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
             </>
           )}
         </div>
+
+        {canEdit && onAddFiles && (
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            hidden
+            aria-hidden
+            onChange={(e) => {
+              const files = Array.from(e.target.files ?? [])
+              e.target.value = ''
+              if (files.length > 0) onAddFiles(message.id, files)
+            }}
+          />
+        )}
 
         {/* Attachments render BELOW the bubble fill, not inside it, so a card
             reads the same on a gold visitor bubble as on a grey agent one. */}

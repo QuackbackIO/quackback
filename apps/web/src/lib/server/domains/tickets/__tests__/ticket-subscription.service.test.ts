@@ -70,8 +70,8 @@ describe.skipIf(!fixture.available)('ticket-subscription.service (real DB, rolle
     const ticketId = await seedTicket()
     const principalId = await seedPrincipal()
 
-    await subscribeToTicket(principalId, ticketId, 'requester')
-    await subscribeToTicket(principalId, ticketId, 'assignee')
+    expect(await subscribeToTicket(principalId, ticketId, 'requester')).toBe(true)
+    expect(await subscribeToTicket(principalId, ticketId, 'assignee')).toBe(false)
 
     const rows = await readRows(ticketId)
     expect(rows).toHaveLength(1)
@@ -83,7 +83,9 @@ describe.skipIf(!fixture.available)('ticket-subscription.service (real DB, rolle
     const principalId = await seedPrincipal()
 
     await subscribeToTicket(principalId, ticketId, 'requester')
-    await unsubscribeFromTicket(principalId, ticketId)
+    // Resolves the removed row's reason, and null once nothing is left to remove.
+    expect(await unsubscribeFromTicket(principalId, ticketId)).toBe('requester')
+    expect(await unsubscribeFromTicket(principalId, ticketId)).toBeNull()
     expect(await readRows(ticketId)).toHaveLength(0)
 
     await subscribeToTicket(principalId, ticketId, 'assignee')
@@ -170,6 +172,29 @@ describe.skipIf(!fixture.available)('ticket-subscription.service (real DB, rolle
     // With no requester named, only team members remain.
     const teamOnly = await getTicketNotifiableWatchers(ticketId, null)
     expect([...teamOnly].sort()).toEqual([admin, member].sort())
+  })
+
+  it('getTicketNotifiableWatchers adds the customers a ticket is shared with only on request', async () => {
+    const ticketId = await seedTicket()
+    const requester = await seedPrincipal('user')
+    const colleague = await seedPrincipal('user')
+    const stranger = await seedPrincipal('user')
+
+    await subscribeToTicket(requester, ticketId, 'requester')
+    await subscribeToTicket(colleague, ticketId, 'participant')
+    await subscribeToTicket(stranger, ticketId, 'manual')
+
+    // The reply email's set: the conversation emails a shared customer itself.
+    expect(await getTicketNotifiableWatchers(ticketId, requester)).toEqual([requester])
+    // The bells' and the status email's set.
+    expect(
+      [
+        ...(await getTicketNotifiableWatchers(ticketId, requester, { withParticipants: true })),
+      ].sort()
+    ).toEqual([requester, colleague].sort())
+    expect(await getTicketNotifiableWatchers(ticketId, null, { withParticipants: true })).toEqual([
+      colleague,
+    ])
   })
 
   it('getTicketAgentWatchersForEvent keeps team members only, mute-filtered', async () => {

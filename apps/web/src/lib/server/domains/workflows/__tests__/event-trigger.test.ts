@@ -297,6 +297,64 @@ describe('eventToWorkflowTrigger: ticket triggers', () => {
     expect(trigger?.actorType).toBe('service')
     expect(trigger?.allowServiceActor).toBeUndefined()
   })
+
+  const ticketDueEvent = (
+    type: 'ticket.due_changed' | 'ticket.due_soon' | 'ticket.overdue',
+    actor: typeof userActor | typeof serviceActor = userActor
+  ): EventData =>
+    ({
+      ...base,
+      type,
+      actor,
+      data: {
+        ticket: { id: 'ticket_1', number: 42, type: 'customer', priority: 'none' },
+        title: 'Cannot log in',
+        dueAt: '2026-01-06T17:00:00Z',
+        ...(type === 'ticket.due_changed' ? { previousDueAt: null } : {}),
+      },
+    }) as unknown as EventData
+
+  it.each(['ticket.due_changed', 'ticket.due_soon', 'ticket.overdue'] as const)(
+    'maps %s to the resolved conversationId when given one',
+    (type) => {
+      expect(eventToWorkflowTrigger(ticketDueEvent(type), 'conversation_9' as never)).toMatchObject(
+        {
+          triggerType: type,
+          conversationId: 'conversation_9',
+          subjectPrincipalId: null,
+          message: null,
+        }
+      )
+    }
+  )
+
+  it.each(['ticket.due_changed', 'ticket.due_soon', 'ticket.overdue'] as const)(
+    'maps %s to null when explicitly resolved to no linked conversation',
+    (type) => {
+      expect(eventToWorkflowTrigger(ticketDueEvent(type), null)).toBeNull()
+    }
+  )
+
+  it('does NOT opt a service-authored ticket.due_changed out of the automated-actor gate (loop guard: a workflow set_ticket_due_date action must not re-trigger ticket.due_changed workflows)', () => {
+    const trigger = eventToWorkflowTrigger(
+      ticketDueEvent('ticket.due_changed', serviceActor),
+      'conversation_9' as never
+    )
+    expect(trigger?.actorType).toBe('service')
+    expect(trigger?.allowServiceActor).toBeUndefined()
+  })
+
+  it.each(['ticket.due_soon', 'ticket.overdue'] as const)(
+    'opts the timer-driven %s out of the automated-actor gate, like the SLA pair',
+    (type) => {
+      const trigger = eventToWorkflowTrigger(
+        ticketDueEvent(type, serviceActor),
+        'conversation_9' as never
+      )
+      expect(trigger?.actorType).toBe('service')
+      expect(trigger?.allowServiceActor).toBe(true)
+    }
+  )
 })
 
 /**
@@ -402,6 +460,20 @@ describe('DISPATCHABLE_TRIGGER_TYPES stays in sync with the switch', () => {
           previousStatus: 'open',
           newStatus: 'closed',
           stage: 'new',
+        })
+      case 'ticket.due_changed':
+        return withData(type, {
+          ticket: { id: 'ticket_1', number: 1, type: 'customer', priority: 'none' },
+          title: 'A ticket',
+          dueAt: '2026-01-06T17:00:00Z',
+          previousDueAt: null,
+        })
+      case 'ticket.due_soon':
+      case 'ticket.overdue':
+        return withData(type, {
+          ticket: { id: 'ticket_1', number: 1, type: 'customer', priority: 'none' },
+          title: 'A ticket',
+          dueAt: '2026-01-06T17:00:00Z',
         })
     }
   }
