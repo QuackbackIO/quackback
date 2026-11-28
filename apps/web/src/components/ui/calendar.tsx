@@ -12,8 +12,11 @@ import { usePageLocale } from '@/components/ui/local-date'
 export type CalendarProps = React.ComponentProps<typeof DayPicker>
 
 const LABELS = {
-  previous: { id: 'ui.calendar.previousMonth', defaultMessage: 'Go to the previous month' },
-  next: { id: 'ui.calendar.nextMonth', defaultMessage: 'Go to the next month' },
+  previous: {
+    id: 'admin.shell.calendar.previousMonth',
+    defaultMessage: 'Go to the previous month',
+  },
+  next: { id: 'admin.shell.calendar.nextMonth', defaultMessage: 'Go to the next month' },
 } satisfies Record<string, MessageDescriptor & { defaultMessage: string }>
 
 /**

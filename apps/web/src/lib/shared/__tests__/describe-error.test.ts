@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { describeError, noticeText } from '../describe-error'
+import { ENGLISH_NOTICE_WORDS, describeError, noticeText } from '../describe-error'
 import {
   UNEXPECTED_ERROR_MESSAGE,
   liftErrorReference,
@@ -89,6 +89,26 @@ describe('describeError', () => {
   it("does not print a bug in the browser's own code", () => {
     const bug = new TypeError("Cannot read properties of undefined (reading 'id')")
     expect(describeError(bug, FALLBACK, team)).toEqual({ title: FALLBACK })
+  })
+
+  it('words a refusal by its code in the page language, and keeps the sentence for other codes', () => {
+    const taken = Object.assign(new Error('A user with this email already exists'), {
+      code: 'EMAIL_TAKEN',
+      statusCode: 400,
+    })
+    const other = Object.assign(new Error('A board with this slug already exists'), {
+      code: 'DUPLICATE_SLUG',
+      statusCode: 409,
+    })
+    const german = {
+      ...ENGLISH_NOTICE_WORDS,
+      codes: { EMAIL_TAKEN: 'Es gibt bereits einen Benutzer mit dieser E-Mail-Adresse' },
+    }
+    expect(describeError(taken, FALLBACK, team, german)).toEqual({
+      title: 'Es gibt bereits einen Benutzer mit dieser E-Mail-Adresse',
+    })
+    expect(describeError(taken, FALLBACK, team)).toEqual({ title: taken.message })
+    expect(describeError(other, FALLBACK, team, german)).toEqual({ title: other.message })
   })
 
   it('falls back when there is nothing to read', () => {

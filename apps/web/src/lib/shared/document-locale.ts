@@ -14,7 +14,8 @@ const LOCALIZED_ROUTE_IDS = new Set([
   '/widget',
   '/unsubscribe',
   // The admin shell's own pages: notifications, search and a teammate's
-  // notification settings. The rest of admin joins area by area.
+  // notification settings. Other admin pages are listed once every string
+  // they render is translated.
   '/admin/notifications',
   '/admin/search',
   '/admin/settings/notifications',

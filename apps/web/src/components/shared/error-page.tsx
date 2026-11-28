@@ -4,7 +4,7 @@ import { DocumentLocaleContext } from '@/components/shared/document-locale-conte
 import { ENGLISH_INTL } from '@/components/ui/use-optional-intl'
 import { CheckIcon, ClipboardDocumentIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
-import { describePlanRefusal } from '@/lib/shared/describe-upgrade'
+import { planRefusalCopy } from '@/components/shared/plan-refusal-copy'
 import { isSeatPausedError } from '@/lib/shared/billing/seat-paused'
 import { errorReferenceOf } from '@/lib/shared/error-reference'
 import { DEFAULT_LOCALE, messageArea, normalizeLocale } from '@/lib/shared/i18n'
@@ -199,46 +199,45 @@ export function EntitlementRequiredPage({
   error: unknown
   fullPage?: boolean
 }) {
-  const normalized = toError(error)
   const isAdminArea = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')
-  const refusal = describePlanRefusal(error, {
-    entitlement: null,
-    feature: 'This feature',
-    requiredPlan: null,
-    requiredPlanName: null,
-    headline: 'This is a plan feature',
-    body: normalized.message,
-  })
 
   return (
     <FriendlyShell fullPage={fullPage}>
-      <h1 className="text-2xl font-semibold tracking-tight">{refusal.headline}</h1>
-      <p className="mt-2 text-sm text-muted-foreground">{normalized.message}</p>
       <ErrorPageCopy>
-        {(copy) => (
-          <div className="mt-6 flex items-center justify-center gap-3">
-            {isAdminArea ? (
-              <Button asChild>
-                <a href="/admin/settings/billing">
-                  {refusal.requiredPlanName
-                    ? copy(
-                        {
-                          id: 'common.errorPage.plan.upgradeTo',
-                          defaultMessage: 'Upgrade to {plan}',
-                        },
-                        { plan: refusal.requiredPlanName }
-                      )
-                    : copy({ id: 'common.errorPage.plan.seePlans', defaultMessage: 'See plans' })}
-                </a>
-              </Button>
-            ) : null}
-            <Button variant="outline" asChild>
-              <a href={isAdminArea ? '/admin/settings' : '/'}>
-                {copy({ id: 'common.errorPage.plan.goBack', defaultMessage: 'Go back' })}
-              </a>
-            </Button>
-          </div>
-        )}
+        {(copy) => {
+          const refusal = planRefusalCopy(error, copy)
+          return (
+            <>
+              <h1 className="text-2xl font-semibold tracking-tight">{refusal.headline}</h1>
+              <p className="mt-2 text-sm text-muted-foreground">{refusal.body}</p>
+              <div className="mt-6 flex items-center justify-center gap-3">
+                {isAdminArea ? (
+                  <Button asChild>
+                    <a href="/admin/settings/billing">
+                      {refusal.requiredPlanName
+                        ? copy(
+                            {
+                              id: 'common.errorPage.plan.upgradeTo',
+                              defaultMessage: 'Upgrade to {plan}',
+                            },
+                            { plan: refusal.requiredPlanName }
+                          )
+                        : copy({
+                            id: 'common.errorPage.plan.seePlans',
+                            defaultMessage: 'See plans',
+                          })}
+                    </a>
+                  </Button>
+                ) : null}
+                <Button variant="outline" asChild>
+                  <a href={isAdminArea ? '/admin/settings' : '/'}>
+                    {copy({ id: 'common.errorPage.plan.goBack', defaultMessage: 'Go back' })}
+                  </a>
+                </Button>
+              </div>
+            </>
+          )
+        }}
       </ErrorPageCopy>
     </FriendlyShell>
   )

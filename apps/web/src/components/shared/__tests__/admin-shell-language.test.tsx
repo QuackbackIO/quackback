@@ -12,7 +12,12 @@ import de from '@/locales/de.json'
 import ar from '@/locales/ar.json'
 import en from '@/locales/en.json'
 import { adminSeedMessages, loadPortalMessages, messageArea } from '@/lib/shared/i18n'
-import { describeError, noticeText, ERROR_NOTICE_MESSAGES } from '@/lib/shared/describe-error'
+import {
+  describeError,
+  noticeText,
+  ERROR_CODE_MESSAGES,
+  ERROR_NOTICE_MESSAGES,
+} from '@/lib/shared/describe-error'
 import { errorNoticeWords, setErrorNoticeWords } from '@/lib/client/error-notice-words'
 import { StateBadge } from '@/components/shared/state-badge'
 import { ErrorNoticeLanguage } from '@/components/shared/error-notice-language'
@@ -29,7 +34,7 @@ const shellKeys = Object.keys(en).filter(
   (key) =>
     key.startsWith('admin.shell.') ||
     key.startsWith('ui.editor.') ||
-    key.startsWith('common.errorNotice.')
+    key.startsWith('admin.shell.errorNotice.')
 )
 
 describe('where the shell strings load', () => {
@@ -106,6 +111,13 @@ describe('in German', () => {
         errorNoticeWords()
       )
     ).toContain('Ref. ABCD-1234')
+    const missing = Object.assign(new Error('Notification not found'), {
+      code: 'NOTIFICATION_NOT_FOUND',
+      statusCode: 404,
+    })
+    expect(describeError(missing, 'x', team, errorNoticeWords()).title).toBe(
+      de['admin.shell.errorNotice.code.notificationNotFound']
+    )
     view.unmount()
     expect(
       describeError(new TypeError('Failed to fetch'), 'x', team, errorNoticeWords()).title
@@ -113,7 +125,10 @@ describe('in German', () => {
   })
 
   it('keeps every notice word in the catalogue', () => {
-    for (const message of Object.values(ERROR_NOTICE_MESSAGES)) {
+    for (const message of [
+      ...Object.values(ERROR_NOTICE_MESSAGES),
+      ...Object.values(ERROR_CODE_MESSAGES),
+    ]) {
       expect((en as Record<string, string>)[message.id], message.id).toBe(message.defaultMessage)
     }
   })

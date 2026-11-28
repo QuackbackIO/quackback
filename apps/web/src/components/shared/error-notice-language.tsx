@@ -1,7 +1,9 @@
 import { useEffect } from 'react'
 import { useIntl } from 'react-intl'
 import {
+  ERROR_CODE_MESSAGES,
   ERROR_NOTICE_MESSAGES,
+  type ErrorCode,
   type ErrorNoticeWord,
   type ErrorNoticeWords,
 } from '@/lib/shared/describe-error'
@@ -21,7 +23,11 @@ export function ErrorNoticeLanguage() {
       // The reference keeps its placeholder; `referenceLabel` fills it in.
       words[word as ErrorNoticeWord] = intl.formatMessage(message, { reference: '{reference}' })
     }
-    return setErrorNoticeWords(words)
+    const codes: Partial<Record<ErrorCode, string>> = {}
+    for (const [code, message] of Object.entries(ERROR_CODE_MESSAGES)) {
+      codes[code as ErrorCode] = intl.formatMessage(message)
+    }
+    return setErrorNoticeWords({ ...words, codes })
   }, [intl])
   return null
 }

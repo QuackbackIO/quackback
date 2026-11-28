@@ -84,9 +84,12 @@ export function DateTimePicker({
   const [open, setOpen] = React.useState(false)
 
   const defaultPlaceholder = dateOnly
-    ? intl.formatMessage({ id: 'ui.dateTimePicker.pickDate', defaultMessage: 'Pick a date' })
+    ? intl.formatMessage({
+        id: 'admin.shell.dateTimePicker.pickDate',
+        defaultMessage: 'Pick a date',
+      })
     : intl.formatMessage({
-        id: 'ui.dateTimePicker.pickDateTime',
+        id: 'admin.shell.dateTimePicker.pickDateTime',
         defaultMessage: 'Pick date & time',
       })
   const resolvedPlaceholder = placeholder ?? defaultPlaceholder
@@ -182,7 +185,7 @@ export function DateTimePicker({
             }}
             className="inline-flex shrink-0 items-center justify-center border-s border-border/50 px-1.5 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
             aria-label={intl.formatMessage({
-              id: 'ui.dateTimePicker.clear',
+              id: 'admin.shell.dateTimePicker.clear',
               defaultMessage: 'Clear date',
             })}
           >
@@ -217,7 +220,10 @@ export function DateTimePicker({
             <div className="flex items-center gap-2">
               <ClockIcon className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm text-muted-foreground">
-                {intl.formatMessage({ id: 'ui.dateTimePicker.time', defaultMessage: 'Time' })}
+                {intl.formatMessage({
+                  id: 'admin.shell.dateTimePicker.time',
+                  defaultMessage: 'Time',
+                })}
               </span>
               <Input
                 type="time"

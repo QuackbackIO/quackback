@@ -15,22 +15,7 @@ import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/shared/utils'
 import { adminQueries } from '@/lib/client/queries/admin'
 import type { TeamMember } from '@/lib/shared/types'
-
-/** Extract a user-friendly message from server errors (Zod validation returns raw JSON) */
-function parseErrorMessage(err: unknown, fallback: string): string {
-  if (!(err instanceof Error)) return fallback
-  const msg = err.message
-  // TanStack Start validation errors may be JSON arrays
-  try {
-    const parsed = JSON.parse(msg)
-    if (Array.isArray(parsed) && parsed[0]?.message) {
-      return parsed[0].message
-    }
-  } catch {
-    // not JSON, use as-is
-  }
-  return msg || fallback
-}
+import { errorText } from '@/lib/client/error-text'
 
 /** A user created or pre-populated inline */
 export interface NewAuthor {
@@ -193,7 +178,7 @@ export function AuthorSelector({
       setOpen(false)
     } catch (err) {
       setFormError(
-        parseErrorMessage(
+        errorText(
           err,
           intl.formatMessage({
             id: 'admin.shell.authorSelector.createFailed',
@@ -228,7 +213,7 @@ export function AuthorSelector({
       setEditingPrincipalId(null)
     } catch (err) {
       setFormError(
-        parseErrorMessage(
+        errorText(
           err,
           intl.formatMessage({
             id: 'admin.shell.authorSelector.updateFailed',

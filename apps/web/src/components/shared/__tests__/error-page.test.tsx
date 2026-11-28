@@ -152,7 +152,7 @@ describe('DefaultErrorPage', () => {
     expect(
       screen.getByRole('heading', { name: 'The audit log is available from the Enterprise plan' })
     ).toBeInTheDocument()
-    expect(screen.getByText(/The audit log is an Enterprise feature/)).toBeInTheDocument()
+    expect(screen.getByText('Upgrade to Enterprise to enable it.')).toBeInTheDocument()
   })
 
   it('keeps the generic plan headline when the refusal names no plan', () => {
@@ -162,12 +162,44 @@ describe('DefaultErrorPage', () => {
       />
     )
 
+    expect(
+      screen.getByRole('heading', { name: 'Workflows are not included in your plan' })
+    ).toBeInTheDocument()
+    expect(screen.getByText('Contact us to add them to your plan.')).toBeInTheDocument()
+  })
+
+  it('keeps the generic plan headline for a feature it cannot name', () => {
+    render(
+      <DefaultErrorPage
+        error={new Error('Custom CSS is not included in your plan. Contact us to enable it.')}
+      />
+    )
+
     expect(screen.getByRole('heading', { name: 'This is a plan feature' })).toBeInTheDocument()
   })
 })
 
 describe('error pages in the reader’s language', () => {
   afterEach(cleanup)
+
+  it('words a plan refusal in the page language, not the server sentence', () => {
+    render(
+      <IntlProvider locale="pl" defaultLocale="en" messages={pl}>
+        <DefaultErrorPage
+          error={
+            new Error(
+              'The audit log is an Enterprise feature. Your workspace is on Business. Upgrade to Enterprise to enable it.'
+            )
+          }
+        />
+      </IntlProvider>
+    )
+    expect(
+      screen.getByRole('heading', { name: 'Dziennik audytu wchodzi w zakres planu Enterprise' })
+    ).toBeTruthy()
+    expect(screen.getByText('Przejdź na Enterprise, aby włączyć tę funkcję.')).toBeTruthy()
+    expect(screen.queryByText(/Enterprise feature/)).toBeNull()
+  })
 
   it('words the not-found page in the page language', () => {
     render(

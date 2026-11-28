@@ -614,7 +614,12 @@ export async function loadWidgetMessages(locale: SupportedLocale): Promise<Recor
  * re-derives the ids from source and fails if one falls outside this list,
  * so a new key can't silently render its English fallback.
  */
-const ONBOARDING_MESSAGE_PREFIXES = ['onboarding.', 'portal.auth.'] as const
+const ONBOARDING_MESSAGE_PREFIXES = [
+  'onboarding.',
+  'portal.auth.',
+  // The error notices' words, which the wizard's failed calls show.
+  'admin.shell.errorNotice.',
+] as const
 
 /** The prefix allowlist as a plain string[], for tests and iteration. */
 export const ONBOARDING_MESSAGE_PREFIX_LIST: readonly string[] = ONBOARDING_MESSAGE_PREFIXES

@@ -39,49 +39,83 @@ export interface ErrorAudience {
  * is already theirs.
  */
 export const ERROR_NOTICE_MESSAGES = {
-  unexpected: { id: 'common.errorNotice.unexpected', defaultMessage: UNEXPECTED_ERROR_MESSAGE },
-  updatedTitle: { id: 'common.errorNotice.updatedTitle', defaultMessage: 'Quackback was updated' },
+  unexpected: {
+    id: 'admin.shell.errorNotice.unexpected',
+    defaultMessage: UNEXPECTED_ERROR_MESSAGE,
+  },
+  updatedTitle: {
+    id: 'admin.shell.errorNotice.updatedTitle',
+    defaultMessage: 'Quackback was updated',
+  },
   updatedDescription: {
-    id: 'common.errorNotice.updatedDescription',
+    id: 'admin.shell.errorNotice.updatedDescription',
     defaultMessage: 'Reload to keep working.',
   },
   unreachable: {
-    id: 'common.errorNotice.unreachable',
+    id: 'admin.shell.errorNotice.unreachable',
     defaultMessage: "Couldn't reach the server",
   },
-  offline: { id: 'common.errorNotice.offline', defaultMessage: "You're offline" },
+  offline: { id: 'admin.shell.errorNotice.offline', defaultMessage: "You're offline" },
   connectionDescription: {
-    id: 'common.errorNotice.connectionDescription',
+    id: 'admin.shell.errorNotice.connectionDescription',
     defaultMessage: 'Check your connection and try again.',
   },
   signedOutTitle: {
-    id: 'common.errorNotice.signedOutTitle',
+    id: 'admin.shell.errorNotice.signedOutTitle',
     defaultMessage: "You've been signed out",
   },
   signedOutDescription: {
-    id: 'common.errorNotice.signedOutDescription',
+    id: 'admin.shell.errorNotice.signedOutDescription',
     defaultMessage: 'Sign in again to continue.',
   },
   denied: {
-    id: 'common.errorNotice.denied',
+    id: 'admin.shell.errorNotice.denied',
     defaultMessage: "You don't have permission to do that",
   },
   invalidDetails: {
-    id: 'common.errorNotice.invalidDetails',
+    id: 'admin.shell.errorNotice.invalidDetails',
     defaultMessage: "Some details aren't valid. Check the form and try again.",
   },
-  reference: { id: 'common.errorNotice.reference', defaultMessage: 'Ref {reference}' },
-  reload: { id: 'common.errorNotice.reload', defaultMessage: 'Reload' },
-  signIn: { id: 'common.errorNotice.signIn', defaultMessage: 'Sign in' },
-  copy: { id: 'common.errorNotice.copy', defaultMessage: 'Copy' },
+  reference: { id: 'admin.shell.errorNotice.reference', defaultMessage: 'Ref {reference}' },
+  reload: { id: 'admin.shell.errorNotice.reload', defaultMessage: 'Reload' },
+  signIn: { id: 'admin.shell.errorNotice.signIn', defaultMessage: 'Sign in' },
+  copy: { id: 'admin.shell.errorNotice.copy', defaultMessage: 'Copy' },
+} as const
+
+/**
+ * Refusals the server explains by code, worded in the page's language. The
+ * English is the server's own sentence for that code. A code not listed here
+ * shows the server's sentence as written.
+ */
+export const ERROR_CODE_MESSAGES = {
+  NOTIFICATION_NOT_FOUND: {
+    id: 'admin.shell.errorNotice.code.notificationNotFound',
+    defaultMessage: 'Notification not found',
+  },
+  EMAIL_TAKEN: {
+    id: 'admin.shell.errorNotice.code.emailTaken',
+    defaultMessage: 'A user with this email already exists',
+  },
+  USER_NOT_FOUND: {
+    id: 'admin.shell.errorNotice.code.userNotFound',
+    defaultMessage: 'User not found',
+  },
+  INVALID_EMAIL: {
+    id: 'admin.shell.errorNotice.code.invalidEmail',
+    defaultMessage: 'Enter a valid email address',
+  },
 } as const
 
 export type ErrorNoticeWord = keyof typeof ERROR_NOTICE_MESSAGES
-export type ErrorNoticeWords = Record<ErrorNoticeWord, string>
+export type ErrorCode = keyof typeof ERROR_CODE_MESSAGES
+export type ErrorNoticeWords = Record<ErrorNoticeWord, string> & {
+  /** The refusals worded by code; without them the server's sentence shows. */
+  codes?: Partial<Record<ErrorCode, string>>
+}
 
 export const ENGLISH_NOTICE_WORDS = Object.fromEntries(
   Object.entries(ERROR_NOTICE_MESSAGES).map(([word, message]) => [word, message.defaultMessage])
-) as ErrorNoticeWords
+) as Record<ErrorNoticeWord, string> as ErrorNoticeWords
 
 /** "Ref ABC123" in the given words. */
 export function referenceLabel(
@@ -104,6 +138,13 @@ function messageOf(error: unknown): string {
   if (typeof error === 'string') return error
   if (error !== null && typeof error === 'object' && 'message' in error) {
     return typeof error.message === 'string' ? error.message : ''
+  }
+  return ''
+}
+
+function codeOf(error: unknown): string {
+  if (error !== null && typeof error === 'object' && 'code' in error) {
+    return typeof error.code === 'string' ? error.code : ''
   }
   return ''
 }
@@ -197,6 +238,8 @@ export function describeError(
   // A bug in the browser's own code: its message was not written for anyone.
   if (RUNTIME_ERROR_NAMES.has(nameOf(error))) return quiet
 
+  const worded = words.codes?.[codeOf(error) as ErrorCode]
+  if (worded) return { title: worded }
   return message ? { title: message } : quiet
 }
 

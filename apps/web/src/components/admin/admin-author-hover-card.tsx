@@ -146,7 +146,7 @@ export function AdminAuthorHoverCard({
                     {profile.displayName ||
                       displayName ||
                       intl.formatMessage({
-                        id: 'ui.authorHoverCard.anonymous',
+                        id: 'admin.shell.authorHoverCard.anonymous',
                         defaultMessage: 'Anonymous',
                       })}
                   </span>
@@ -156,7 +156,7 @@ export function AdminAuthorHoverCard({
                   {teamQuery.data?.blocked && (
                     <Badge variant="destructive" size="sm" className="shrink-0">
                       {intl.formatMessage({
-                        id: 'ui.authorHoverCard.blocked',
+                        id: 'admin.shell.authorHoverCard.blocked',
                         defaultMessage: 'Blocked',
                       })}
                     </Badge>
@@ -181,21 +181,21 @@ export function AdminAuthorHoverCard({
               <CardStat
                 value={profile.postCount}
                 label={intl.formatMessage({
-                  id: 'ui.authorHoverCard.posts',
+                  id: 'admin.shell.authorHoverCard.posts',
                   defaultMessage: 'Posts',
                 })}
               />
               <CardStat
                 value={profile.commentCount}
                 label={intl.formatMessage({
-                  id: 'ui.authorHoverCard.comments',
+                  id: 'admin.shell.authorHoverCard.comments',
                   defaultMessage: 'Comments',
                 })}
               />
               <CardStat
                 value={profile.voteCount}
                 label={intl.formatMessage({
-                  id: 'ui.authorHoverCard.votes',
+                  id: 'admin.shell.authorHoverCard.votes',
                   defaultMessage: 'Votes',
                 })}
               />
@@ -209,7 +209,7 @@ export function AdminAuthorHoverCard({
               >
                 <span className="text-xs font-medium">
                   {intl.formatMessage({
-                    id: 'ui.authorHoverCard.openProfile',
+                    id: 'admin.shell.authorHoverCard.openProfile',
                     defaultMessage: 'Open full profile',
                   })}
                 </span>
@@ -253,7 +253,10 @@ function TeamInfoRows({
     <div className="mt-3 flex flex-col gap-[5px] border-t border-border/50 pt-2.5 text-xs leading-4">
       <div className="flex items-center justify-between gap-2">
         <span className="shrink-0 text-muted-foreground">
-          {intl.formatMessage({ id: 'ui.authorHoverCard.company', defaultMessage: 'Company' })}
+          {intl.formatMessage({
+            id: 'admin.shell.authorHoverCard.company',
+            defaultMessage: 'Company',
+          })}
         </span>
         <span className="min-w-0 truncate font-medium">
           {team.company ? (
@@ -273,7 +276,10 @@ function TeamInfoRows({
       </div>
       <div className="flex items-center justify-between gap-2">
         <span className="shrink-0 text-muted-foreground">
-          {intl.formatMessage({ id: 'ui.authorHoverCard.lastSeen', defaultMessage: 'Last seen' })}
+          {intl.formatMessage({
+            id: 'admin.shell.authorHoverCard.lastSeen',
+            defaultMessage: 'Last seen',
+          })}
         </span>
         <span className="min-w-0 truncate">
           {team.lastSeenAt ? <TimeAgo date={team.lastSeenAt} /> : '-'}
@@ -282,7 +288,10 @@ function TeamInfoRows({
       {segments.length > 0 && (
         <div className="flex items-center justify-between gap-2">
           <span className="shrink-0 text-muted-foreground">
-            {intl.formatMessage({ id: 'ui.authorHoverCard.segments', defaultMessage: 'Segments' })}
+            {intl.formatMessage({
+              id: 'admin.shell.authorHoverCard.segments',
+              defaultMessage: 'Segments',
+            })}
           </span>
           <span className="flex min-w-0 items-center justify-end gap-1 overflow-hidden">
             {visible.map((seg) => (
