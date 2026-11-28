@@ -21,9 +21,7 @@ export const Route = createFileRoute('/admin/changelog')({
       throw redirect({ to: getFirstEnabledAdminProductPath(context.settings?.featureFlags) })
     }
   },
-  loader: async ({ context }) => ({
-    seededAreas: await seedAdminAreas(context.personLocale, 'adminProduct'),
-  }),
+  loader: ({ context }) => seedAdminAreas(context.personLocale, 'adminProduct'),
   component: ChangelogPage,
 })
 

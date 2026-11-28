@@ -57,7 +57,7 @@ export const Route = createFileRoute('/admin/settings/office-hours')({
   loader: async ({ context }) => {
     assertSettingsPageAccess(context.permissions, '/admin/settings/office-hours')
     await context.queryClient.ensureQueryData(officeHoursQuery)
-    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminChannelSettings') }
+    return seedAdminAreas(context.personLocale, 'adminChannelSettings')
   },
   component: OfficeHoursPage,
 })

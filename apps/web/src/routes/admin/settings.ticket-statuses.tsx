@@ -25,7 +25,7 @@ export const Route = createFileRoute('/admin/settings/ticket-statuses')({
       context.queryClient.ensureQueryData(ticketStatusesQuery),
       context.queryClient.ensureQueryData(ticketStageLabelsQuery),
     ])
-    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminChannelSettings') }
+    return seedAdminAreas(context.personLocale, 'adminChannelSettings')
   },
   component: TicketStatusesPage,
 })

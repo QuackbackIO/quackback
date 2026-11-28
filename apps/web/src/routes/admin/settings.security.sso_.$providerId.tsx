@@ -33,7 +33,7 @@ export const Route = createFileRoute('/admin/settings/security/sso_/$providerId'
       ensure(adminQueries.authProviderStatus()),
       context.queryClient.ensureQueryData(settingsQueries.providerAccountCount(providerId)),
     ])
-    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminWorkspaceSettings') }
+    return seedAdminAreas(context.personLocale, 'adminWorkspaceSettings')
   },
   component: ProviderDetailRoute,
 })

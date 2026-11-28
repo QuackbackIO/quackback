@@ -13,7 +13,7 @@ export const Route = createFileRoute('/admin/settings/companies')({
     assertSettingsPageAccess(context.permissions, '/admin/settings/companies')
     const { queryClient } = context
     await queryClient.ensureQueryData(adminQueries.companyAttributes())
-    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminIntegrationSettings') }
+    return seedAdminAreas(context.personLocale, 'adminIntegrationSettings')
   },
   component: CompaniesPage,
 })

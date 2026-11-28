@@ -9,7 +9,7 @@ import { seedAdminAreas } from '@/lib/shared/i18n'
 export const Route = createFileRoute('/admin/settings/labs')({
   loader: async ({ context }) => {
     assertSettingsPageAccess(context.permissions, '/admin/settings/labs')
-    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminWorkspaceSettings') }
+    return seedAdminAreas(context.personLocale, 'adminWorkspaceSettings')
   },
   component: LabsSettingsPage,
 })

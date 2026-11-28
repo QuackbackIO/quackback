@@ -21,7 +21,7 @@ export const Route = createFileRoute('/admin/settings/statuses')({
     // Pre-fetch statuses using React Query
     await queryClient.ensureQueryData(adminQueries.statuses())
 
-    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminChannelSettings') }
+    return seedAdminAreas(context.personLocale, 'adminChannelSettings')
   },
   component: StatusesPage,
 })

@@ -58,7 +58,7 @@ export const Route = createFileRoute('/admin/settings/agent')({
       warmQuery(queryClient, assistantQueries.guidanceRules()),
       warmQuery(queryClient, assistantQueries.guidanceRuleStats()),
     ])
-    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminAutomation') }
+    return seedAdminAreas(context.personLocale, 'adminAutomation')
   },
   errorComponent: ({ error, reset }) => (
     <DefaultErrorPage error={error} reset={reset} fullPage={false} />

@@ -49,6 +49,6 @@ describe('settings labs route', () => {
     await expect(options.loader({ context: { permissions: [] } })).rejects.toBeDefined()
     await expect(
       options.loader({ context: { permissions: [PERMISSIONS.SETTINGS_MANAGE] } })
-    ).resolves.toEqual({ seededAreas: { areas: ['adminWorkspaceSettings'], messages: {} } })
+    ).resolves.toEqual({})
   })
 })

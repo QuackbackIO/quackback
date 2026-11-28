@@ -42,7 +42,7 @@ export const Route = createFileRoute('/admin/settings/members')({
     ])
 
     return {
-      seededAreas: await seedAdminAreas(context.personLocale, 'adminWorkspaceSettings'),
+      ...(await seedAdminAreas(context.personLocale, 'adminWorkspaceSettings')),
       settings,
       currentMember: principal as { id: PrincipalId; role: 'admin' | 'member'; userId: UserId },
       canManageTeams,

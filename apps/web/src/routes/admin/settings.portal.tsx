@@ -96,7 +96,7 @@ export const Route = createFileRoute('/admin/settings/portal')({
         : null,
       ensureBillingCatalogue(context.queryClient, context.billingEnabled),
     ])
-    return { tabs, seededAreas: await seedAdminAreas(context.personLocale, 'adminChannelSettings') }
+    return { tabs, ...(await seedAdminAreas(context.personLocale, 'adminChannelSettings')) }
   },
   component: PortalSettingsRoute,
 })

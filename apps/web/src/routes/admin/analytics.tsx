@@ -11,9 +11,7 @@ export const Route = createFileRoute('/admin/analytics')({
   // The open section lives in the URL so a section can be linked to. An
   // unknown value is dropped and the page opens on the overview.
   validateSearch: (raw: Record<string, unknown>) => ({ section: sectionSearchValue(raw.section) }),
-  loader: async ({ context }) => ({
-    seededAreas: await seedAdminAreas(context.personLocale, 'adminProduct'),
-  }),
+  loader: ({ context }) => seedAdminAreas(context.personLocale, 'adminProduct'),
   component: AnalyticsRoute,
 })
 

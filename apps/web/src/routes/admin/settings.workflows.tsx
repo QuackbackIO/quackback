@@ -50,7 +50,7 @@ export const Route = createFileRoute('/admin/settings/workflows')({
     ])
     return {
       workflowsEntitled,
-      seededAreas: await seedAdminAreas(context.personLocale, 'adminAutomation'),
+      ...(await seedAdminAreas(context.personLocale, 'adminAutomation')),
     }
   },
   component: WorkflowsPageRoute,

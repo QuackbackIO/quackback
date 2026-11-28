@@ -46,7 +46,7 @@ export const Route = createFileRoute('/admin/settings/boards/')({
       // The Email card's "Sent from" line, so it renders from the document.
       warmQuery(context.queryClient, surfaceSenderQuery('feedback')),
     ])
-    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminChannelSettings') }
+    return seedAdminAreas(context.personLocale, 'adminChannelSettings')
   },
   component: BoardsSettingsPage,
 })

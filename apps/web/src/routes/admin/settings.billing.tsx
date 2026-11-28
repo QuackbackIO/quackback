@@ -60,7 +60,7 @@ export const Route = createFileRoute('/admin/settings/billing')({
       context.queryClient.ensureQueryData(billingQueries.invoices()).catch(() => null),
       context.queryClient.ensureQueryData(billingQueries.usage()).catch(() => []),
     ])
-    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminWorkspaceSettings') }
+    return seedAdminAreas(context.personLocale, 'adminWorkspaceSettings')
   },
   component: BillingPage,
 })

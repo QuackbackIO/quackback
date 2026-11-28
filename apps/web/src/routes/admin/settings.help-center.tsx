@@ -42,7 +42,7 @@ export const Route = createFileRoute('/admin/settings/help-center')({
 
     const { queryClient } = context
     await queryClient.ensureQueryData(settingsQueries.helpCenterConfig())
-    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminChannelSettings') }
+    return seedAdminAreas(context.personLocale, 'adminChannelSettings')
   },
   component: HelpCenterSettingsRoute,
 })

@@ -15,9 +15,7 @@ export const Route = createFileRoute('/admin/help-center')({
       throw redirect({ to: getFirstEnabledAdminProductPath(context.settings?.featureFlags) })
     }
   },
-  loader: async ({ context }) => ({
-    seededAreas: await seedAdminAreas(context.personLocale, 'adminHelpCenter'),
-  }),
+  loader: ({ context }) => seedAdminAreas(context.personLocale, 'adminHelpCenter'),
   component: HelpCenterLayout,
 })
 

@@ -16,7 +16,7 @@ export const Route = createFileRoute('/admin/settings/members_/roles/new')({
   // The editor starts from the roles list (permission presets, a duplicate's source).
   loader: async ({ context }) => {
     await context.queryClient.ensureQueryData(settingsQueries.roles())
-    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminWorkspaceSettings') }
+    return seedAdminAreas(context.personLocale, 'adminWorkspaceSettings')
   },
   component: NewRolePage,
 })

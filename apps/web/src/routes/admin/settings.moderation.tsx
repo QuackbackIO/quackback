@@ -18,7 +18,7 @@ export const Route = createFileRoute('/admin/settings/moderation')({
 
     const { queryClient } = context
     await queryClient.ensureQueryData(settingsQueries.portalPageConfig())
-    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminChannelSettings') }
+    return seedAdminAreas(context.personLocale, 'adminChannelSettings')
   },
   component: ModerationPage,
 })

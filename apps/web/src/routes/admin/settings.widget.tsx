@@ -24,7 +24,7 @@ export const Route = createFileRoute('/admin/settings/widget')({
       can(PERMISSIONS.MEMBER_VIEW) ? ensure(adminQueries.onboardingStatus()) : undefined,
     ])
 
-    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminChannelSettings') }
+    return seedAdminAreas(context.personLocale, 'adminChannelSettings')
   },
   component: WidgetSettingsGate,
 })

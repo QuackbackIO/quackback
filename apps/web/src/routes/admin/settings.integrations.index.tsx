@@ -27,11 +27,11 @@ export const Route = createFileRoute('/admin/settings/integrations/')({
     ])
     return {
       integrationsEnabled,
-      seededAreas: await seedAdminAreas(
+      ...(await seedAdminAreas(
         context.personLocale,
         'adminIntegrationSettings',
         'adminIntegrationCatalog'
-      ),
+      )),
     }
   },
   component: IntegrationsPage,

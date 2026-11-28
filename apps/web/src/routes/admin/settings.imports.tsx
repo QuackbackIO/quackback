@@ -31,7 +31,7 @@ export const Route = createFileRoute('/admin/settings/imports')({
         ? warmQuery(ensure, settingsQueries.importRuns())
         : undefined,
     ])
-    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminIntegrationSettings') }
+    return seedAdminAreas(context.personLocale, 'adminIntegrationSettings')
   },
   component: ImportsHubPage,
 })

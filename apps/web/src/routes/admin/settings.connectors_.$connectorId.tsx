@@ -36,7 +36,7 @@ export const Route = createFileRoute('/admin/settings/connectors_/$connectorId')
   },
   loader: async ({ context, params }) => {
     await context.queryClient.ensureQueryData(connectorQueries.detail(params.connectorId))
-    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminAutomation') }
+    return seedAdminAreas(context.personLocale, 'adminAutomation')
   },
   errorComponent: ({ error, reset }) => (
     <DefaultErrorPage error={error} reset={reset} fullPage={false} />

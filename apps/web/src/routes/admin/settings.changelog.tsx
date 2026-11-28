@@ -42,7 +42,7 @@ export const Route = createFileRoute('/admin/settings/changelog')({
         ? warmQuery(ensure, changelogCategoryQueries.segments())
         : undefined,
     ])
-    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminChannelSettings') }
+    return seedAdminAreas(context.personLocale, 'adminChannelSettings')
   },
   component: ChangelogSettingsPage,
 })

@@ -9,9 +9,7 @@ export const Route = createFileRoute('/admin/settings/developers_/workspace-keys
   beforeLoad: ({ context }) => {
     assertSettingsPageAccess(context.permissions, '/admin/settings/developers/workspace-keys/new')
   },
-  loader: async ({ context }) => ({
-    seededAreas: await seedAdminAreas(context.personLocale, 'adminIntegrationSettings'),
-  }),
+  loader: ({ context }) => seedAdminAreas(context.personLocale, 'adminIntegrationSettings'),
   component: NewWorkspaceKeyPage,
 })
 

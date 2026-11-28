@@ -79,7 +79,7 @@ export const Route = createFileRoute('/admin/users')({
     await warmUsersPage(queryClient, permissions)
 
     return {
-      seededAreas: await seedAdminAreas(context.personLocale, 'adminPeople'),
+      ...(await seedAdminAreas(context.personLocale, 'adminPeople')),
       currentMemberRole: principal.role,
     }
   },

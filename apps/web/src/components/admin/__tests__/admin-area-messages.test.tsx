@@ -2,12 +2,7 @@
 import { render, screen } from '@testing-library/react'
 import { FormattedMessage, IntlProvider } from 'react-intl'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  loadAdminMessages,
-  messageArea,
-  seedAdminAreas,
-  type SeededAdminAreas,
-} from '@/lib/shared/i18n'
+import { loadAdminMessages, messageArea, seedAdminAreas } from '@/lib/shared/i18n'
 import en from '@/locales/en.json'
 
 let matches: { loaderData?: unknown }[] = []
@@ -18,14 +13,13 @@ vi.mock('@tanstack/react-router', () => ({
 
 const { AdminAreaMessages, mergeSeededAreas } = await import('../admin-area-messages')
 
-function seeded(messages: Record<string, string>): { seededAreas: SeededAdminAreas } {
-  return { seededAreas: { areas: ['adminPeople'], messages } }
+function seeded(messages: Record<string, string>): { areaMessages: Record<string, string> } {
+  return { areaMessages: messages }
 }
 
 describe('seedAdminAreas', () => {
   it('seeds only the named areas, in the admin language', async () => {
-    const { areas, messages } = await seedAdminAreas('de', 'adminPeople')
-    expect(areas).toEqual(['adminPeople'])
+    const messages = (await seedAdminAreas('de', 'adminPeople')).areaMessages ?? {}
     const keys = Object.keys(messages)
     expect(keys.length).toBeGreaterThan(0)
     expect(keys.every((key) => messageArea(key) === 'adminPeople')).toBe(true)
@@ -33,9 +27,9 @@ describe('seedAdminAreas', () => {
     expect(messages['admin.people.new.title']).not.toBe(en['admin.people.new.title'])
   })
 
-  it('seeds nothing in English or without a language', async () => {
-    expect((await seedAdminAreas('en', 'adminPeople')).messages).toEqual({})
-    expect((await seedAdminAreas(undefined, 'adminPeople')).messages).toEqual({})
+  it("adds nothing to an English page's data, or without a language", async () => {
+    expect(await seedAdminAreas('en', 'adminPeople')).toEqual({})
+    expect(await seedAdminAreas(undefined, 'adminPeople')).toEqual({})
   })
 
   it("leaves the admin areas' strings out of the admin layout's seed", async () => {

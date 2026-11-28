@@ -42,7 +42,7 @@ export const Route = createFileRoute('/admin/settings/channels_/email')({
       warmQuery(ensure, channels.emailAutoAck()),
       warmQuery(ensure, channels.emailActivity()),
     ])
-    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminChannelSettings') }
+    return seedAdminAreas(context.personLocale, 'adminChannelSettings')
   },
   component: EmailChannelPage,
 })

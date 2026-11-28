@@ -18,9 +18,7 @@ export const Route = createFileRoute('/admin/status')({
       throw redirect({ to: getFirstEnabledAdminProductPath(context.settings?.featureFlags) })
     }
   },
-  loader: async ({ context }) => ({
-    seededAreas: await seedAdminAreas(context.personLocale, 'adminHelpCenter'),
-  }),
+  loader: ({ context }) => seedAdminAreas(context.personLocale, 'adminHelpCenter'),
   component: StatusPage,
 })
 

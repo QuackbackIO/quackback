@@ -345,7 +345,7 @@ export const Route = createFileRoute('/admin/inbox')({
         ? warm(queryClient.ensureQueryData(conversationInboxQueries.thread(ref.id)))
         : undefined,
     ])
-    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminInbox') }
+    return seedAdminAreas(context.personLocale, 'adminInbox')
   },
   component: InboxRoute,
 })
