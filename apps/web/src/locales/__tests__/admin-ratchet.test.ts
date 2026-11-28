@@ -34,6 +34,35 @@ describe('the English scan', () => {
     ).toEqual(['toast.error("Could not save the view")', 'label: "General"'])
   })
 
+  it('finds a single lowercase word shown as it is, and messages built with values', () => {
+    expect(
+      texts(
+        `const a = <>
+          <p>{n} members</p>
+          <Button>save</Button>
+          <input placeholder="search..." />
+          <span aria-label={\`\${name} avatar\`} />
+        </>
+        toast.error(\`Failed to save \${x}\`)`
+      )
+    ).toEqual([
+      '"members"',
+      '"save"',
+      'placeholder="search..."',
+      'aria-label="{…} avatar"',
+      'toast.error("Failed to save {…}")',
+    ])
+  })
+
+  it('still skips a key or a path in a prop, and a template made only of values', () => {
+    expect(
+      texts(
+        `const a = <Field label="inbox.unassigned" title={\`\${a}/\${b}\`} />
+         toast(\`\${message}\`)`
+      )
+    ).toEqual([])
+  })
+
   it('gives the line of each finding', () => {
     expect(scanEnglish('const a = 1\nconst b = <p>Hello there</p>', 'x.tsx')).toEqual<Finding[]>([
       { line: 2, text: '"Hello there"' },
