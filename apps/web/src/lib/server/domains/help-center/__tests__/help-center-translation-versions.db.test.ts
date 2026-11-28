@@ -309,9 +309,12 @@ describe.skipIf(!fixture.available)('translation versions', () => {
 
       await discardPendingTranslationUpdate(id, 'de')
       const row = await translationOf(id, 'de')
+      // The version it was made from stays as the discard marker.
       expect(row).toMatchObject({
         title: 'Konto einrichten',
         pendingTitle: null,
+        pendingContent: null,
+        pendingSourceRevision: 2,
         checkResult: null,
       })
       const [de] = await getArticleTranslationOverview(id, ['de'])

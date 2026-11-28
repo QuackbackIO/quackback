@@ -9,6 +9,9 @@
  *
  * An AI update never changes the live text. It waits in the pending_* columns
  * until a person publishes it, which makes it live and current, or discards it.
+ * A discarded update leaves its pending_source_revision behind with no
+ * pending text: the automatic upkeep does not make that version again, and
+ * the next change to the article clears the way.
  */
 import {
   db,
@@ -315,14 +318,19 @@ export async function publishPendingTranslationUpdate(
   return row
 }
 
-/** Drop the waiting AI update; the live text stays as it is. */
+/**
+ * Drop the waiting AI update; the live text stays as it is. The revision it
+ * was made from stays as a marker, so the automatic upkeep does not make the
+ * same update again for that version. A person can still ask for one.
+ */
 export async function discardPendingTranslationUpdate(
   articleId: KbArticleId,
   locale: string
 ): Promise<TranslationRow> {
+  const { pendingSourceRevision: _kept, ...cleared } = clearedPending
   const [row] = await db
     .update(helpCenterArticleTranslations)
-    .set({ ...clearedPending })
+    .set(cleared)
     .where(
       and(translationIn(articleId, locale), isNotNull(helpCenterArticleTranslations.pendingTitle))
     )

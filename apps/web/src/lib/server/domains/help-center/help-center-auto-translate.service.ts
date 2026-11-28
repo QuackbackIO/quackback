@@ -132,15 +132,23 @@ export type ArticleTranslationOutcome =
   | {
       kind: 'skipped'
       reason:
-        'unavailable' | 'held' | 'not_found' | 'current' | 'update_waiting' | 'changed' | 'failed'
+        | 'unavailable'
+        | 'held'
+        | 'not_found'
+        | 'current'
+        | 'update_waiting'
+        | 'discarded'
+        | 'changed'
+        | 'failed'
     }
 
 export interface TranslateArticleOptions {
   guard?: ParkedTranslationGuard
   /**
    * 'auto' (the queue) leaves any update already waiting for the current
-   * version. 'request' (a person's "Update with AI") replaces one that failed
-   * its checks.
+   * version, and makes none for a version whose update a person discarded.
+   * 'request' (a person's "Update with AI") replaces one that failed its
+   * checks.
    */
   mode?: 'auto' | 'request'
 }
@@ -197,6 +205,14 @@ export async function runArticleTranslation(
     const waitingOk = existing.checkResult?.ok !== false
     if (waitingCurrent && (opts.mode !== 'request' || waitingOk)) {
       return { kind: 'skipped', reason: 'update_waiting' }
+    }
+    // A person discarded the update for this version; only they ask again.
+    const discarded =
+      existing.pendingTitle === null &&
+      existing.pendingSourceRevision !== null &&
+      existing.pendingSourceRevision >= source.revision
+    if (discarded && opts.mode !== 'request') {
+      return { kind: 'skipped', reason: 'discarded' }
     }
   }
 

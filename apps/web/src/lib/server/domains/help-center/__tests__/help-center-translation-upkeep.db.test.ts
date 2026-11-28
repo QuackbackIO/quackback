@@ -3,7 +3,8 @@
  * back): a text change on a published article queues one job per language
  * and revision, the job gives a translation behind its article an update
  * that waits beside its unchanged live text, and the daily catch-up queues
- * only translations still behind.
+ * only translations still behind. A discarded update is not made again for
+ * the same version unless a person asks.
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createId, type KbArticleId, type PrincipalId } from '@quackback/ids'
@@ -72,6 +73,9 @@ const { runHelpCenterTranslate, HELP_CENTER_TRANSLATE_QUEUE } =
   await import('../help-center-translate-queue')
 const { queueTranslationUpkeep, runTranslationCatchUp } =
   await import('../help-center-translation-upkeep')
+const { discardPendingTranslationUpdate } =
+  await import('../help-center-translation-versions.service')
+const { runArticleTranslation } = await import('../help-center-auto-translate.service')
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -255,5 +259,55 @@ describe.skipIf(!fixture.available)('automatic translation upkeep', () => {
 
     await runTranslationCatchUp(now)
     expect(await queuedFor(behind)).toHaveLength(1)
+  })
+
+  describe('a discarded update', () => {
+    async function discardedAtRevision2(): Promise<KbArticleId> {
+      const id = await seedArticle()
+      await translate(id, 'de')
+      await testDb
+        .update(helpCenterArticles)
+        .set({ textRevision: 2 })
+        .where(eq(helpCenterArticles.id, id))
+      await runHelpCenterTranslate(job({ type: 'translate-article', articleId: id, locale: 'de' }))
+      await discardPendingTranslationUpdate(id, 'de')
+      return id
+    }
+
+    it('is not queued by the next catch-up, and a queued job makes no model call', async () => {
+      const id = await discardedAtRevision2()
+      expect(state.modelCalls).toBe(1)
+
+      expect(await runTranslationCatchUp(new Date('2026-11-29T03:40:00Z'))).toBe(0)
+      expect(await queuedFor(id)).toEqual([])
+
+      await runHelpCenterTranslate(job({ type: 'translate-article', articleId: id, locale: 'de' }))
+      expect(state.modelCalls).toBe(1)
+      expect((await translation(id, 'de')).pendingTitle).toBeNull()
+    })
+
+    it('is made again once the article changes after the discard', async () => {
+      const id = await discardedAtRevision2()
+      await testDb
+        .update(helpCenterArticles)
+        .set({ textRevision: 3 })
+        .where(eq(helpCenterArticles.id, id))
+
+      expect(await runTranslationCatchUp(new Date('2026-11-29T03:40:00Z'))).toBe(1)
+      await runHelpCenterTranslate(job({ type: 'translate-article', articleId: id, locale: 'de' }))
+      expect(state.modelCalls).toBe(2)
+      expect(await translation(id, 'de')).toMatchObject({
+        pendingTitle: 'Erstattungen (KI)',
+        pendingSourceRevision: 3,
+      })
+    })
+
+    it('is made again when a person asks for it', async () => {
+      const id = await discardedAtRevision2()
+      const outcome = await runArticleTranslation(id, 'de', { mode: 'request' })
+      expect(outcome).toMatchObject({ kind: 'update' })
+      expect(state.modelCalls).toBe(2)
+      expect((await translation(id, 'de')).pendingTitle).toBe('Erstattungen (KI)')
+    })
   })
 })

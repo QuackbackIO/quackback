@@ -329,7 +329,8 @@ export const helpCenterArticleTranslations = pgTable(
     sourceText: jsonb('source_text').$type<TranslationSourceText>(),
     /**
      * An AI update waiting for review. The live columns above are what
-     * readers see until a person publishes it.
+     * readers see until a person publishes it. After a discard only
+     * pendingSourceRevision stays, so the automatic upkeep skips that version.
      */
     pendingTitle: text('pending_title'),
     pendingDescription: text('pending_description'),

@@ -87,7 +87,8 @@ export async function queueTranslationUpkeep(article: {
 
 /**
  * The daily catch-up: queue each translation of a published article that is
- * behind it and has no update waiting for its current version. Keyed by day,
+ * behind it and has no update waiting for, or discarded at, its current
+ * version (pending_source_revision covers both). Keyed by day,
  * so a run on the next day queues an item again if it is still behind.
  */
 export async function runTranslationCatchUp(now: Date = new Date()): Promise<number> {
