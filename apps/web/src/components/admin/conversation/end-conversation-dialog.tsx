@@ -93,7 +93,7 @@ export const EndConversationDialog = memo(function EndConversationDialog({
                   aria-checked={selected}
                   onClick={() => setReason(value)}
                   className={cn(
-                    'flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm transition-colors',
+                    'flex w-full items-center justify-between rounded-md border px-3 py-2 text-start text-sm transition-colors',
                     selected
                       ? 'border-primary bg-primary/5 font-medium text-foreground'
                       : 'border-border text-muted-foreground hover:bg-muted/60'

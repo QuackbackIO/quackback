@@ -226,7 +226,7 @@ export function buildExtensions(
           TableRow,
           TableHeader.configure({
             HTMLAttributes: {
-              class: 'border border-border bg-muted/50 p-2 text-left font-semibold',
+              class: 'border border-border bg-muted/50 p-2 text-start font-semibold',
             },
           }),
           TableCell.configure({
@@ -1775,24 +1775,24 @@ const EditorChrome = memo(function EditorChrome({
       {contextMenuImageSrc && (
         <ContextMenuContent className="min-w-[180px]">
           <ContextMenuItem onClick={contextMenuActions.viewImage}>
-            <Expand className="mr-3 size-4 text-muted-foreground" />
+            <Expand className="me-3 size-4 text-muted-foreground" />
             View image
           </ContextMenuItem>
           <ContextMenuItem onClick={contextMenuActions.downloadImage}>
-            <Download className="mr-3 size-4 text-muted-foreground" />
+            <Download className="me-3 size-4 text-muted-foreground" />
             Download
           </ContextMenuItem>
           <ContextMenuItem onClick={contextMenuActions.copyImage}>
-            <Copy className="mr-3 size-4 text-muted-foreground" />
+            <Copy className="me-3 size-4 text-muted-foreground" />
             Copy to clipboard
           </ContextMenuItem>
           <ContextMenuItem onClick={contextMenuActions.copyLink}>
-            <Link2 className="mr-3 size-4 text-muted-foreground" />
+            <Link2 className="me-3 size-4 text-muted-foreground" />
             Copy link
           </ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem onClick={contextMenuActions.deleteImage}>
-            <Trash2 className="mr-3 size-4 text-muted-foreground" />
+            <Trash2 className="me-3 size-4 text-muted-foreground" />
             Delete
           </ContextMenuItem>
         </ContextMenuContent>
@@ -2063,6 +2063,15 @@ function handleMediaPaste(
 // ============================================================================
 // Toolbar Components
 // ============================================================================
+
+/** Column arrows point at the side the column goes on, so they turn round in a right-to-left table. */
+function ColumnBeforeIcon({ className }: { className?: string }) {
+  return <ArrowLeft className={cn(className, 'rtl:-scale-x-100')} />
+}
+
+function ColumnAfterIcon({ className }: { className?: string }) {
+  return <ArrowRight className={cn(className, 'rtl:-scale-x-100')} />
+}
 
 interface ToolbarButtonProps {
   /** Drawn at size-4. A component rather than an element, so a memoized
@@ -2385,14 +2394,14 @@ function TableToolbar({ editor, disabled }: TableToolbarProps) {
       <ToolbarDivider />
       {/* Add column left */}
       <ToolbarButton
-        icon={ArrowLeft}
+        icon={ColumnBeforeIcon}
         onClick={() => editor.chain().focus().addColumnBefore().run()}
         disabled={disabled}
         title="Add column left"
       />
       {/* Add column right */}
       <ToolbarButton
-        icon={ArrowRight}
+        icon={ColumnAfterIcon}
         onClick={() => editor.chain().focus().addColumnAfter().run()}
         disabled={disabled}
         title="Add column right"

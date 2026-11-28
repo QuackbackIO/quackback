@@ -87,6 +87,7 @@ import { importBrief, ImportSection, importSummary, useBrandImport } from './imp
 import { AskDock } from './ask-dock'
 import { siteColoursOf } from './brand-apply'
 import { track } from '@/lib/client/analytics'
+import { arrowStep } from '@/lib/client/arrow-step'
 import {
   pageOfPath,
   sectionForTarget,
@@ -862,7 +863,7 @@ function PanelSection({
           {isOpen ? (
             <ChevronDownIcon className="size-4 shrink-0" aria-hidden="true" />
           ) : (
-            <ChevronRightIcon className="size-4 shrink-0" aria-hidden="true" />
+            <ChevronRightIcon className="rtl:-scale-x-100 size-4 shrink-0" aria-hidden="true" />
           )}
         </span>
       </button>
@@ -972,7 +973,7 @@ const DevicePicker = memo(function DevicePicker({
   onDevice: (device: PreviewDevice) => void
 }) {
   const onDeviceKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0
+    const step = arrowStep(event)
     if (!step) return
     event.preventDefault()
     const index = DEVICES.findIndex((d) => d.value === device)

@@ -33,7 +33,7 @@ function Calendar({ className, classNames, showOutsideDays = true, ...props }: C
         [UI.Weekday]: 'text-muted-foreground rounded-md w-8 font-normal text-xs',
         [UI.Week]: 'flex w-full mt-1',
         [UI.Day]:
-          'h-8 w-8 text-center rounded-md text-sm p-0 relative [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected])]:bg-accent first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20',
+          'h-8 w-8 text-center rounded-md text-sm p-0 relative [&:has([aria-selected].day-range-end)]:rounded-e-md [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected])]:bg-accent first:[&:has([aria-selected])]:rounded-s-md last:[&:has([aria-selected])]:rounded-e-md focus-within:relative focus-within:z-20',
         [UI.DayButton]: cn(
           buttonVariants({ variant: 'ghost' }),
           'h-8 w-8 p-0 font-normal text-xs aria-selected:opacity-100'
@@ -53,9 +53,9 @@ function Calendar({ className, classNames, showOutsideDays = true, ...props }: C
       components={{
         Chevron: ({ orientation }) => {
           if (orientation === 'left') {
-            return <ChevronLeftIcon className="h-4 w-4" />
+            return <ChevronLeftIcon className="rtl:-scale-x-100 h-4 w-4" />
           }
-          return <ChevronRightIcon className="h-4 w-4" />
+          return <ChevronRightIcon className="rtl:-scale-x-100 h-4 w-4" />
         },
       }}
       {...props}

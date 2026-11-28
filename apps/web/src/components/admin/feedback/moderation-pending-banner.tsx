@@ -24,10 +24,10 @@ export function ModerationPendingBanner() {
         <span className="text-foreground">{label}</span>
         <Link
           to="/admin/feedback/moderation"
-          className="ml-auto inline-flex items-center gap-1 text-primary hover:underline font-medium"
+          className="ms-auto inline-flex items-center gap-1 text-primary hover:underline font-medium"
         >
           Review
-          <ArrowRightIcon className="h-3.5 w-3.5" />
+          <ArrowRightIcon className="rtl:-scale-x-100 h-3.5 w-3.5" />
         </Link>
       </div>
     </div>

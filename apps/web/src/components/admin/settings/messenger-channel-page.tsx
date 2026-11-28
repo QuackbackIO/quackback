@@ -17,6 +17,7 @@ import { SUPPORTED_LOCALES } from '@/lib/shared/i18n'
 import { WIDGET_LOCALE_LABELS, type WidgetTranslations } from '@/lib/shared/widget/translations'
 import { INLINE_LINK } from '@/components/admin/settings/inline-link'
 import type { ReplyTime } from '@/lib/shared/widget/reply-time'
+import { arrowStep } from '@/lib/client/arrow-step'
 
 // Type-only import: the options live here so this page pulls no shared
 // runtime module (or chunk) in with the widget.
@@ -76,8 +77,8 @@ export function MessengerChannelPage() {
 
   // Radio-group keys: arrows move the choice (wrapping) and focus with it.
   function onReplyTimeKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key]
-    if (step === undefined) return
+    const step = arrowStep(event, { vertical: true })
+    if (step === 0) return
     event.preventDefault()
     const count = REPLY_TIME_OPTIONS.length
     const index = (REPLY_TIME_OPTIONS.indexOf(replyTime) + step + count) % count

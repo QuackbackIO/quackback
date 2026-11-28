@@ -85,14 +85,14 @@ export function StepPalette({
   return (
     <div className="flex flex-col gap-3 p-3">
       <div className="relative">
-        <MagnifyingGlassIcon className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+        <MagnifyingGlassIcon className="pointer-events-none absolute top-1/2 start-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search steps…"
           aria-label="Search steps"
-          className="w-full rounded-md border border-input bg-secondary py-1.5 pr-2.5 pl-8 text-xs outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+          className="w-full rounded-md border border-input bg-secondary py-1.5 pe-2.5 ps-8 text-xs outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
         />
       </div>
       {groups.length === 0 ? (
@@ -118,7 +118,7 @@ function PaletteGroup({ label, items }: { label: string; items: PaletteItem[] })
             onClick={item.onSelect}
             disabled={item.disabled}
             title={item.reason}
-            className={`${MENU_ROW} w-full text-left hover:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-50`}
+            className={`${MENU_ROW} w-full text-start hover:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-50`}
           >
             <span
               className={`flex size-6 shrink-0 items-center justify-center rounded-md ${STEP_TILE}`}

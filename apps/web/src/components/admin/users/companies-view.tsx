@@ -241,7 +241,7 @@ function AddCompanyFilterButton({
                 key={cat.key}
                 type="button"
                 onClick={() => setCategory(cat)}
-                className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 text-[13px] text-left hover:bg-muted/50 transition-colors"
+                className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 text-[13px] text-start hover:bg-muted/50 transition-colors"
               >
                 <span className="flex items-center gap-2">
                   {cat.key === 'mrr' ? (
@@ -251,20 +251,20 @@ function AddCompanyFilterButton({
                   )}
                   {cat.label}
                 </span>
-                <ChevronRightIcon className="size-3.5 text-muted-foreground" />
+                <ChevronRightIcon className="rtl:-scale-x-100 size-3.5 text-muted-foreground" />
               </button>
             ))}
             {sourceAvailable && (
               <button
                 type="button"
                 onClick={() => setCategory({ key: 'source', label: 'Source', kind: 'source' })}
-                className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 text-[13px] text-left hover:bg-muted/50 transition-colors"
+                className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 text-[13px] text-start hover:bg-muted/50 transition-colors"
               >
                 <span className="flex items-center gap-2">
                   <TagIcon className="size-4 text-muted-foreground" />
                   Source
                 </span>
-                <ChevronRightIcon className="size-3.5 text-muted-foreground" />
+                <ChevronRightIcon className="rtl:-scale-x-100 size-3.5 text-muted-foreground" />
               </button>
             )}
             {availableCustom.length > 0 && (
@@ -280,13 +280,13 @@ function AddCompanyFilterButton({
                     onClick={() =>
                       setCategory({ key: attr.key, label: attr.label, kind: attrKind(attr.type) })
                     }
-                    className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 text-[13px] text-left hover:bg-muted/50 transition-colors"
+                    className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 text-[13px] text-start hover:bg-muted/50 transition-colors"
                   >
                     <span className="flex items-center gap-2">
                       <TagIcon className="size-4 text-muted-foreground" />
                       {attr.label}
                     </span>
-                    <ChevronRightIcon className="size-3.5 text-muted-foreground" />
+                    <ChevronRightIcon className="rtl:-scale-x-100 size-3.5 text-muted-foreground" />
                   </button>
                 ))}
               </>
@@ -299,7 +299,7 @@ function AddCompanyFilterButton({
               onClick={() => setCategory(null)}
               className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground border-b border-border/50"
             >
-              <ChevronRightIcon className="h-2.5 w-2.5 rotate-180" />
+              <ChevronRightIcon className="rtl:-scale-x-100 h-2.5 w-2.5 rotate-180" />
               {category.label}
             </button>
             {category.kind === 'source' ? (
@@ -588,19 +588,19 @@ export function CompaniesView({
             <div className="hidden sm:flex items-center gap-3 px-3 py-2">
               <div className="h-9 w-9 shrink-0" aria-hidden="true" />
               <span className={cn('min-w-0 flex-1', MENU_LABEL)}>Company</span>
-              <span className={cn('w-24 text-left', MENU_LABEL)}>Plan</span>
-              <span className={cn('w-28 whitespace-nowrap text-right', MENU_LABEL)}>
+              <span className={cn('w-24 text-start', MENU_LABEL)}>Plan</span>
+              <span className={cn('w-28 whitespace-nowrap text-end', MENU_LABEL)}>
                 Monthly spend
               </span>
-              <span className={cn('w-16 text-right', MENU_LABEL)}>Users</span>
-              <span className={cn('w-16 text-right', MENU_LABEL)}>Source</span>
+              <span className={cn('w-16 text-end', MENU_LABEL)}>Users</span>
+              <span className={cn('w-16 text-end', MENU_LABEL)}>Source</span>
             </div>
             {companies.map((company) => (
               <button
                 key={company.id}
                 type="button"
                 onClick={() => onSelectCompany(company.id)}
-                className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-muted/40 transition-colors"
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-start hover:bg-muted/40 transition-colors"
               >
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
                   <BuildingOffice2Icon className="h-4.5 w-4.5 text-muted-foreground" />
@@ -622,16 +622,16 @@ export function CompaniesView({
                 </span>
                 <span
                   className={cn(
-                    'w-28 shrink-0 text-right text-xs tabular-nums hidden sm:block',
+                    'w-28 shrink-0 text-end text-xs tabular-nums hidden sm:block',
                     company.mrrCents == null ? 'text-muted-foreground/60' : 'text-foreground'
                   )}
                 >
                   {formatMonthlySpend(company.mrrCents, formatNumber)}
                 </span>
-                <span className="w-16 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                <span className="w-16 shrink-0 text-end text-xs tabular-nums text-muted-foreground">
                   {company.memberCount}
                 </span>
-                <span className="w-16 shrink-0 text-right hidden sm:block">
+                <span className="w-16 shrink-0 text-end hidden sm:block">
                   <SourceBadge source={company.source} />
                 </span>
               </button>

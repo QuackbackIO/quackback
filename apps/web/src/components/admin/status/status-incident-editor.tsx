@@ -494,7 +494,7 @@ function StatusIncidentEditorContent({
                     setTemplateId(t.id)
                   }}
                 />
-                <div className="ml-auto">
+                <div className="ms-auto">
                   {terminal && (
                     <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
                       <Checkbox
@@ -542,7 +542,7 @@ function StatusIncidentEditorContent({
         <Sheet open={mobileSettingsOpen} onOpenChange={setMobileSettingsOpen}>
           <SheetTrigger asChild>
             <Button type="button" variant="outline" size="sm" className="lg:hidden">
-              <Cog6ToothIcon className="h-4 w-4 mr-1.5" />
+              <Cog6ToothIcon className="h-4 w-4 me-1.5" />
               Details
             </Button>
           </SheetTrigger>
@@ -806,7 +806,7 @@ function IncidentTimeline({ incident }: { incident: StatusIncidentAdminDetail })
             {i < updates.length - 1 && (
               <span
                 aria-hidden="true"
-                className="absolute left-[5px] top-4 bottom-0 w-0.5 rounded-full bg-border/80"
+                className="absolute start-[5px] top-4 bottom-0 w-0.5 rounded-full bg-border/80"
               />
             )}
             <span

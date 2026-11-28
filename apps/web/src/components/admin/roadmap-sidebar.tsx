@@ -185,7 +185,7 @@ export function RoadmapSidebar({
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="size-5 opacity-0 group-hover:opacity-100 -mr-1"
+                          className="size-5 opacity-0 group-hover:opacity-100 -me-1"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <EllipsisVerticalIcon className="h-4 w-4" />
@@ -193,7 +193,7 @@ export function RoadmapSidebar({
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => openEditDialog(roadmap)}>
-                          <PencilIcon className="h-4 w-4 mr-2" />
+                          <PencilIcon className="h-4 w-4 me-2" />
                           Edit
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
@@ -201,7 +201,7 @@ export function RoadmapSidebar({
                           className="text-destructive focus:text-destructive"
                           onClick={() => openDeleteDialog(roadmap)}
                         >
-                          <TrashIcon className="h-4 w-4 mr-2" />
+                          <TrashIcon className="h-4 w-4 me-2" />
                           Delete
                         </DropdownMenuItem>
                       </DropdownMenuContent>

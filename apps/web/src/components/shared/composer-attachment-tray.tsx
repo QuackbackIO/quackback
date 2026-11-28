@@ -69,7 +69,7 @@ function RemoveButton({ item, onRemove }: Omit<TileProps, 'onRetry'>) {
         { id: 'files.tray.remove', defaultMessage: 'Remove {name}' },
         { name: item.name || 'file' }
       )}
-      className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full border border-border bg-background text-muted-foreground shadow-sm transition-colors hover:text-foreground"
+      className="absolute -end-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full border border-border bg-background text-muted-foreground shadow-sm transition-colors hover:text-foreground"
     >
       <XMarkIcon className="h-3 w-3" />
     </button>
@@ -239,7 +239,7 @@ function FileTile({ item, onRemove, onRetry, onOpen }: TileProps) {
             { id: 'files.card.open', defaultMessage: 'Open {name}' },
             { name: item.name || 'file' }
           )}
-          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+          className="flex min-w-0 flex-1 items-center gap-2 text-start"
         >
           {body}
         </button>

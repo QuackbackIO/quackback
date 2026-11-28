@@ -145,7 +145,7 @@ export function AddConnectorDialog({
             onClick={() => setAdvanced((value) => !value)}
           >
             <ChevronDownIcon
-              className={`size-3.5 transition-transform ${advanced ? '' : '-rotate-90'}`}
+              className={`size-3.5 transition-transform ${advanced ? '' : '-rotate-90 rtl:rotate-90'}`}
             />
             {intl.formatMessage({
               id: 'automation.connectors.add.advanced',

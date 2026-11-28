@@ -631,7 +631,7 @@ function TestResultPanel({
         <ExclamationTriangleIcon className="h-4 w-4" />
         Stopped at: {STAGE_LABELS[result.stage] ?? result.stage}
         {result.errorCode && (
-          <code className="ml-1 text-[11px] text-muted-foreground">({result.errorCode})</code>
+          <code className="ms-1 text-[11px] text-muted-foreground">({result.errorCode})</code>
         )}
       </div>
       <p className="text-xs text-muted-foreground">{result.hint}</p>

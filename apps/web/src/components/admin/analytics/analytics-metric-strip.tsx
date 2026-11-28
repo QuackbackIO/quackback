@@ -38,7 +38,7 @@ export function AnalyticsMetricStrip({
             type="button"
             onClick={() => onChange(key)}
             className={cn(
-              'group relative flex-1 px-5 py-4 text-left transition-colors duration-150',
+              'group relative flex-1 px-5 py-4 text-start transition-colors duration-150',
               !isActive && 'hover:bg-muted/20'
             )}
           >

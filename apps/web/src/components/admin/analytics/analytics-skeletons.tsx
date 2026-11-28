@@ -62,7 +62,7 @@ function BarListSkeleton({ rows = 6 }: { rows?: number }) {
         {Array.from({ length: rows }).map((_, i) => (
           <div key={i} className="flex items-center gap-2.5 py-2">
             <Skeleton className="h-4" style={{ width: BAR_WIDTHS[i % BAR_WIDTHS.length] }} />
-            <Skeleton className="ml-auto h-4 w-6" />
+            <Skeleton className="ms-auto h-4 w-6" />
           </div>
         ))}
       </div>

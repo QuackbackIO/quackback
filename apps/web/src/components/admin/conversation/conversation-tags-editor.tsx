@@ -255,7 +255,7 @@ export const ConversationTagsEditor = memo(function ConversationTagsEditor({
                       onClick={() =>
                         applied ? removeMut.mutate(t.id) : addMut.mutate({ tagId: t.id })
                       }
-                      className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                      className="flex min-w-0 flex-1 items-center gap-2 text-start"
                     >
                       <span
                         className="h-2.5 w-2.5 shrink-0 rounded-full"
@@ -285,7 +285,7 @@ export const ConversationTagsEditor = memo(function ConversationTagsEditor({
                       setQuery('')
                       setCreateColor(DEFAULT_TAG_COLOR)
                     }}
-                    className="flex w-full items-center gap-1.5 rounded-md py-1 text-left text-[13px] text-muted-foreground hover:text-foreground"
+                    className="flex w-full items-center gap-1.5 rounded-md py-1 text-start text-[13px] text-muted-foreground hover:text-foreground"
                   >
                     <span
                       className="h-2.5 w-2.5 shrink-0 rounded-full"

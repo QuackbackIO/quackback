@@ -436,7 +436,7 @@ export function StatusComponentsView() {
               className="rounded-xl border border-border/50 bg-card p-4 flex items-center gap-3"
             >
               <Skeleton className="h-4 w-40" />
-              <Skeleton className="h-4 w-24 ml-auto" />
+              <Skeleton className="h-4 w-24 ms-auto" />
               <Skeleton className="h-4 w-20" />
             </div>
           ))}
@@ -645,7 +645,7 @@ function SortableGroupHeader({
         <Bars3Icon className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100" />
       </button>
       <span className="text-sm font-semibold">{group.name}</span>
-      <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100">
+      <div className="ms-auto flex items-center gap-1 opacity-0 group-hover:opacity-100">
         <Button
           variant="ghost"
           size="icon"
@@ -728,7 +728,7 @@ function SortableComponentRow({
     <div
       ref={setNodeRef}
       style={style}
-      className={`group flex items-center gap-3 px-3 py-2.5 ${indent ? 'pl-8' : ''}`}
+      className={`group flex items-center gap-3 px-3 py-2.5 ${indent ? 'ps-8' : ''}`}
     >
       <button
         {...attributes}
@@ -778,7 +778,7 @@ function SortableComponentRow({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={onEdit}>
-              <PencilSquareIcon className="mr-2 h-4 w-4" />
+              <PencilSquareIcon className="me-2 h-4 w-4" />
               Edit service
             </DropdownMenuItem>
             <DropdownMenuCheckboxItem
@@ -792,7 +792,7 @@ function SortableComponentRow({
               onClick={onDelete}
               className="text-destructive focus:text-destructive"
             >
-              <TrashIcon className="mr-2 h-4 w-4" />
+              <TrashIcon className="me-2 h-4 w-4" />
               Delete service
             </DropdownMenuItem>
           </DropdownMenuContent>

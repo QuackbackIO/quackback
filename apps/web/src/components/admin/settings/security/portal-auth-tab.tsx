@@ -408,7 +408,7 @@ export function PortalAuthTab({ portalConfig, teamOpenSignup }: PortalAuthTabPro
                   disabled={!domainInput.trim() || isAccessBusy}
                   className="h-9 shrink-0"
                 >
-                  <PlusIcon className="mr-1 h-3.5 w-3.5" />
+                  <PlusIcon className="me-1 h-3.5 w-3.5" />
                   Add
                 </Button>
               </div>
@@ -425,7 +425,7 @@ export function PortalAuthTab({ portalConfig, teamOpenSignup }: PortalAuthTabPro
                         type="button"
                         onClick={() => handleRemoveDomain(domain)}
                         disabled={isAccessBusy}
-                        className="ml-2 rounded p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-40 transition-colors"
+                        className="ms-2 rounded p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-40 transition-colors"
                         aria-label={`Remove ${domain}`}
                       >
                         <XMarkIcon className="h-3.5 w-3.5" />
@@ -538,7 +538,7 @@ function PortalInvitesSection() {
       description="Invite users by email. They get a magic link to sign in."
       action={
         <Button type="button" size="sm" variant="outline" onClick={portal.openDialog}>
-          <PlusIcon className="mr-1.5 h-3.5 w-3.5" />
+          <PlusIcon className="me-1.5 h-3.5 w-3.5" />
           Invite users
         </Button>
       }
@@ -623,7 +623,7 @@ function InviteSummary({
         className={`${INLINE_LINK} inline-flex items-center gap-1 text-xs`}
       >
         Manage invites
-        <ArrowRightIcon className="h-3 w-3" />
+        <ArrowRightIcon className="rtl:-scale-x-100 h-3 w-3" />
       </Link>
     </div>
   )

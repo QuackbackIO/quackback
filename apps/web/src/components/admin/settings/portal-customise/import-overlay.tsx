@@ -99,7 +99,7 @@ export const ImportOverlay = memo(function ImportOverlay({ state }: { state: Imp
       <div
         data-testid="import-kit"
         className={cn(
-          'import-kit absolute bottom-3.5 left-3.5 grid w-[min(264px,calc(100%-28px))] gap-1.5',
+          'import-kit absolute bottom-3.5 start-3.5 grid w-[min(264px,calc(100%-28px))] gap-1.5',
           'rounded-xl border border-border bg-popover px-3 py-2.5 text-popover-foreground shadow-lg',
           phase === 'leaving' && 'import-kit-leaving'
         )}

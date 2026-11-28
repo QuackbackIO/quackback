@@ -32,7 +32,7 @@ export function VariableInsertMenu({
         {WORKFLOW_VARIABLE_CATALOGUE.map((v) => (
           <DropdownMenuItem key={v.key} onClick={() => onInsert(v.key)}>
             {v.label}
-            <span className="ml-auto font-mono text-[11px] text-muted-foreground">
+            <span className="ms-auto font-mono text-[11px] text-muted-foreground">
               {`{${v.key}}`}
             </span>
           </DropdownMenuItem>

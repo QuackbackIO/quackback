@@ -441,7 +441,7 @@ export function BoardAccessForm({ board }: BoardAccessFormProps) {
             <Link
               to="/admin/settings/security/authentication"
               search={{ tab: 'portal-access' }}
-              className={`${INLINE_LINK} ml-auto whitespace-nowrap`}
+              className={`${INLINE_LINK} ms-auto whitespace-nowrap`}
             >
               Workspace access →
             </Link>
@@ -517,7 +517,7 @@ function PresetCard({ active, label, description, icon, onClick }: PresetCardPro
       aria-label={label}
       aria-pressed={active}
       className={cn(
-        'flex flex-col items-stretch gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors',
+        'flex flex-col items-stretch gap-1 rounded-lg border px-3 py-2.5 text-start transition-colors',
         active
           ? 'border-primary bg-primary/10'
           : 'border-border bg-muted/30 hover:bg-muted/60 cursor-pointer'
@@ -526,7 +526,7 @@ function PresetCard({ active, label, description, icon, onClick }: PresetCardPro
       <div className="flex items-center gap-1.5">
         <span className={active ? 'text-primary' : 'text-muted-foreground'}>{icon}</span>
         <span className={cn('text-xs font-semibold', active && 'text-primary')}>{label}</span>
-        {active && <CheckIcon className="ml-auto h-3 w-3 text-primary" />}
+        {active && <CheckIcon className="ms-auto h-3 w-3 text-primary" />}
       </div>
       <span className="text-xs leading-snug text-muted-foreground">{description}</span>
     </button>
@@ -545,7 +545,7 @@ function CustomStatusCard({ active }: CustomStatusCardProps) {
       aria-pressed={active}
       title="Tweak any cell below to enter Custom."
       className={cn(
-        'flex cursor-default flex-col items-stretch gap-1 rounded-lg border border-dashed px-3 py-2.5 text-left transition-colors',
+        'flex cursor-default flex-col items-stretch gap-1 rounded-lg border border-dashed px-3 py-2.5 text-start transition-colors',
         active ? 'border-primary bg-primary/10' : 'border-border bg-transparent opacity-60'
       )}
     >
@@ -554,7 +554,7 @@ function CustomStatusCard({ active }: CustomStatusCardProps) {
           <PencilSquareIcon className="h-3 w-3" />
         </span>
         <span className={cn('text-xs font-semibold', active && 'text-primary')}>Custom</span>
-        {active && <CheckIcon className="ml-auto h-3 w-3 text-primary" />}
+        {active && <CheckIcon className="ms-auto h-3 w-3 text-primary" />}
       </div>
       <span className="text-xs leading-snug text-muted-foreground">
         Set when any cell deviates from a preset.
@@ -606,7 +606,7 @@ function Matrix({
           {TIERS.map((t) => (
             <div
               key={t.id}
-              className="flex flex-col items-center justify-start gap-0.5 border-l px-1 py-2.5 text-center"
+              className="flex flex-col items-center justify-start gap-0.5 border-s px-1 py-2.5 text-center"
             >
               <div className="flex items-center gap-1.5 whitespace-nowrap text-sm font-semibold text-foreground">
                 <span className="text-muted-foreground">
@@ -740,7 +740,7 @@ function MatrixRow({
               wsBlocked ? 'workspace' : hierarchyBlocked ? 'hierarchy' : undefined
             }
             className={cn(
-              'flex min-h-[58px] items-center justify-center border-l px-2 py-3 transition-colors',
+              'flex min-h-[58px] items-center justify-center border-s px-2 py-3 transition-colors',
               !disabled && 'cursor-pointer',
               disabled && 'cursor-not-allowed opacity-40',
               !disabled && isSelected && !isEmptySegments && 'bg-primary/10',
@@ -942,7 +942,7 @@ function SegmentPicker({
                 type="button"
                 onClick={() => toggle(s.id)}
                 className={cn(
-                  'flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left transition-colors',
+                  'flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-start transition-colors',
                   on ? 'bg-muted/60' : 'hover:bg-muted/40'
                 )}
               >

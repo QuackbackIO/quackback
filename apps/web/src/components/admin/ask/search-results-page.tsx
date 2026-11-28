@@ -95,7 +95,7 @@ function SearchResultsView({ query, kind, page = 1 }: SearchResultsPageProps) {
           <div className="relative">
             <MagnifyingGlassIcon
               aria-hidden="true"
-              className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+              className="pointer-events-none absolute top-1/2 start-3 size-4 -translate-y-1/2 text-muted-foreground"
             />
             <Input
               ref={input}
@@ -103,7 +103,7 @@ function SearchResultsView({ query, kind, page = 1 }: SearchResultsPageProps) {
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               maxLength={MAX_SEARCH_LENGTH}
-              className="pl-9"
+              className="ps-9"
               aria-label={searchLabel}
               placeholder={searchLabel}
             />

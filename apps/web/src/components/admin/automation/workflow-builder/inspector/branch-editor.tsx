@@ -89,7 +89,7 @@ export function BranchEditor({
                   <button
                     type="button"
                     onClick={() => setExpanded(expanded === i ? null : i)}
-                    className="min-w-0 flex-1 rounded-sm px-1.5 py-1 text-left hover:bg-muted/50"
+                    className="min-w-0 flex-1 rounded-sm px-1.5 py-1 text-start hover:bg-muted/50"
                   >
                     <div className="truncate text-xs font-medium">
                       {letter} · {path.key}

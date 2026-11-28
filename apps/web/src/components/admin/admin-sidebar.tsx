@@ -510,7 +510,7 @@ export function AdminSidebar({
                 <DropdownMenuTrigger asChild>
                   <button data-admin-rail-item="" className={railControlClass()}>
                     <QuestionMarkCircleIcon className="size-5 shrink-0" />
-                    <span className="min-w-0 flex-1 truncate text-left">
+                    <span className="min-w-0 flex-1 truncate text-start">
                       {intl.formatMessage({ id: 'admin.help.label', defaultMessage: 'Help' })}
                     </span>
                     {latestVersion && (
@@ -537,7 +537,7 @@ export function AdminSidebar({
                   </LaunchPlanInHelp>
                   {cloudEnabled && (
                     <DropdownMenuItem onClick={openHelpLauncher}>
-                      <ChatBubbleLeftRightIcon className="mr-2 h-4 w-4" />
+                      <ChatBubbleLeftRightIcon className="me-2 h-4 w-4" />
                       <FormattedMessage id="admin.help.contact" defaultMessage="Contact us" />
                     </DropdownMenuItem>
                   )}
@@ -547,7 +547,7 @@ export function AdminSidebar({
                       target="_blank"
                       rel="noopener noreferrer"
                     >
-                      <BookOpenIcon className="mr-2 h-4 w-4" />
+                      <BookOpenIcon className="me-2 h-4 w-4" />
                       <FormattedMessage id="admin.help.docs" defaultMessage="Documentation" />
                     </a>
                   </DropdownMenuItem>
@@ -557,7 +557,7 @@ export function AdminSidebar({
                       target="_blank"
                       rel="noopener noreferrer"
                     >
-                      <DocumentTextIcon className="mr-2 h-4 w-4" />
+                      <DocumentTextIcon className="me-2 h-4 w-4" />
                       <FormattedMessage id="admin.help.whatsNew" defaultMessage="What's new" />
                     </a>
                   </DropdownMenuItem>
@@ -568,7 +568,7 @@ export function AdminSidebar({
                         target="_blank"
                         rel="noopener noreferrer"
                       >
-                        <GitHubStarIcon className="mr-2 h-4 w-4" />
+                        <GitHubStarIcon className="me-2 h-4 w-4" />
                         <FormattedMessage
                           id="admin.starPrompt.star"
                           defaultMessage="Star on GitHub"
@@ -602,7 +602,7 @@ export function AdminSidebar({
                       {conversationsEnabled && (
                         <span
                           className={cn(
-                            'absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full ring-2 ring-background',
+                            'absolute -bottom-0.5 -end-0.5 h-2 w-2 rounded-full ring-2 ring-background',
                             availability === 'online'
                               ? 'bg-success'
                               : 'border-2 border-muted-foreground bg-background'
@@ -611,7 +611,7 @@ export function AdminSidebar({
                         />
                       )}
                     </span>
-                    <span className="min-w-0 flex-1 truncate text-left">{name || 'Account'}</span>
+                    <span className="min-w-0 flex-1 truncate text-start">{name || 'Account'}</span>
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" side="right" sideOffset={8} className="w-56">
@@ -648,7 +648,7 @@ export function AdminSidebar({
       </aside>
 
       {/* Mobile Header */}
-      <header className="sm:hidden fixed top-0 left-0 right-0 z-50 flex items-center justify-between h-14 px-4 border-b border-border/60 bg-card/95 backdrop-blur-sm">
+      <header className="sm:hidden fixed top-0 start-0 end-0 z-50 flex items-center justify-between h-14 px-4 border-b border-border/60 bg-card/95 backdrop-blur-sm">
         <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
           <SheetTrigger asChild>
             <Button
@@ -844,7 +844,7 @@ export function AdminSidebar({
                 {conversationsEnabled && (
                   <span
                     className={cn(
-                      'absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-background',
+                      'absolute bottom-0 end-0 h-2.5 w-2.5 rounded-full ring-2 ring-background',
                       availability === 'online'
                         ? 'bg-success'
                         : 'border-2 border-muted-foreground bg-background'

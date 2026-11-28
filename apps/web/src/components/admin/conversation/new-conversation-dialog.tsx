@@ -189,7 +189,7 @@ export function NewConversationDialog({
                   className="text-muted-foreground hover:text-foreground transition-colors"
                   aria-label="Choose a different user"
                 >
-                  <ArrowLeftIcon className="size-4" />
+                  <ArrowLeftIcon className="rtl:-scale-x-100 size-4" />
                 </button>
               )}
               <Avatar src={target.image} name={target.name ?? 'User'} className="size-7 text-xs" />

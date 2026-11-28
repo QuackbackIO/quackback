@@ -42,7 +42,7 @@ export function SavedMessagesColumn({
   return (
     <div
       className={cn(
-        'flex min-h-0 w-full shrink-0 flex-col border-r border-border/50 md:w-80',
+        'flex min-h-0 w-full shrink-0 flex-col border-e border-border/50 md:w-80',
         selectedId && 'hidden md:flex'
       )}
     >
@@ -72,7 +72,7 @@ export function SavedMessagesColumn({
                 else if (m.ticketId) onSelect({ ticketId: m.ticketId })
               }}
               className={cn(
-                'flex w-full flex-col gap-0.5 border-b border-border/30 px-3 py-3 text-left transition-colors',
+                'flex w-full flex-col gap-0.5 border-b border-border/30 px-3 py-3 text-start transition-colors',
                 selectedId === (m.conversationId ?? m.ticketId)
                   ? 'bg-muted/60'
                   : 'hover:bg-muted/30'

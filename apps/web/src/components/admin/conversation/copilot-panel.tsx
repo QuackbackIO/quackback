@@ -643,7 +643,7 @@ function CopilotEmptyState({
             key={action.label}
             type="button"
             onClick={() => onQuickAction(action.question)}
-            className="w-full rounded-xl border border-border/60 bg-card/60 px-3.5 py-3 text-left transition-colors hover:border-border hover:bg-muted/60"
+            className="w-full rounded-xl border border-border/60 bg-card/60 px-3.5 py-3 text-start transition-colors hover:border-border hover:bg-muted/60"
           >
             <span className="flex items-start gap-3">
               <action.icon className="mt-0.5 size-4 shrink-0 text-primary" />

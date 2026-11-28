@@ -649,8 +649,8 @@ function PlanCard(props: {
       className={cn(
         'flex flex-col p-5',
         props.index > 0 && 'border-t border-border/50 sm:border-t-0',
-        props.index % 2 === 1 && 'sm:border-l sm:border-border/50',
-        props.index > 0 && 'xl:border-l xl:border-border/50',
+        props.index % 2 === 1 && 'sm:border-s sm:border-border/50',
+        props.index > 0 && 'xl:border-s xl:border-border/50',
         current && 'bg-muted/30 ring-1 ring-inset ring-foreground/15',
         plan.recommended && !current && 'bg-primary/5'
       )}
@@ -676,7 +676,7 @@ function PlanCard(props: {
             <NewTabHint />
           </a>
         </div>
-        <p className="shrink-0 text-right">
+        <p className="shrink-0 text-end">
           <span className="text-lg font-semibold tracking-tight tabular-nums">
             {formatUsd(monthlyCents, 0)}
           </span>

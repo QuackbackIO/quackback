@@ -301,7 +301,7 @@ export function ChangelogMetadataSidebarContent({
           <SidebarRow icon={<UsersIcon className="h-4 w-4" />} label="Notify segments">
             {null}
           </SidebarRow>
-          <p className="text-xs text-muted-foreground pl-6">
+          <p className="text-xs text-muted-foreground ps-6">
             Leave empty to notify every subscriber.
           </p>
           <SegmentMultiSelect
@@ -363,13 +363,13 @@ export function ChangelogMetadataSidebarContent({
               type="button"
               onClick={() => onFeaturedImageChange(null)}
               aria-label="Remove featured image"
-              className="absolute top-1.5 right-1.5 rounded-full bg-background/80 border border-border/60 p-1 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+              className="absolute top-1.5 end-1.5 rounded-full bg-background/80 border border-border/60 p-1 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
             >
               <XMarkIcon className="h-3 w-3" />
             </button>
           </div>
         ) : (
-          <p className="text-xs text-muted-foreground/60 italic pl-6">No featured image</p>
+          <p className="text-xs text-muted-foreground/60 italic ps-6">No featured image</p>
         )}
       </div>
 
@@ -395,7 +395,7 @@ export function ChangelogMetadataSidebarContent({
             </PopoverTrigger>
             <PopoverContent className="w-72 p-0" align="end" sideOffset={4}>
               <div className="flex items-center border-b px-3">
-                <MagnifyingGlassIcon className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+                <MagnifyingGlassIcon className="me-2 h-4 w-4 shrink-0 opacity-50" />
                 <input
                   placeholder="Search shipped posts…"
                   value={search}
@@ -457,7 +457,7 @@ export function ChangelogMetadataSidebarContent({
                 className="group relative flex items-start gap-2 rounded-md border border-border/40 bg-muted/40 p-2"
               >
                 <VoteCount count={post.voteCount} />
-                <div className="min-w-0 flex-1 pr-5">
+                <div className="min-w-0 flex-1 pe-5">
                   <p className="truncate text-xs font-medium leading-snug">{post.title}</p>
                   <p className="mt-0.5 truncate text-xs text-muted-foreground">
                     {post.authorName || 'Anonymous'}
@@ -467,7 +467,7 @@ export function ChangelogMetadataSidebarContent({
                     <TimeAgo date={post.createdAt} />
                   </p>
                 </div>
-                <div className="absolute right-1 top-1 opacity-0 transition-opacity group-hover:opacity-100">
+                <div className="absolute end-1 top-1 opacity-0 transition-opacity group-hover:opacity-100">
                   <ListItemRemoveButton
                     onClick={() => handleRemovePost(post.id)}
                     label={`Remove ${post.title}`}
@@ -477,7 +477,7 @@ export function ChangelogMetadataSidebarContent({
             ))}
           </div>
         ) : (
-          <p className="text-xs text-muted-foreground/60 italic pl-6">No posts linked yet</p>
+          <p className="text-xs text-muted-foreground/60 italic ps-6">No posts linked yet</p>
         )}
       </div>
     </div>

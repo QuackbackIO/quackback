@@ -39,13 +39,13 @@ export function AnalyticsBarList({ header, rows }: AnalyticsBarListProps) {
                   Full-height bars touch and fuse into one jagged block when
                   values cluster, which looks like a rendering glitch. */}
               <div
-                className="absolute inset-y-1 left-0 rounded-md bg-foreground/[0.07]"
+                className="absolute inset-y-1 start-0 rounded-md bg-foreground/[0.07]"
                 style={{ width: `${pct}%` }}
                 aria-hidden
               />
               {row.leading}
               <div className="relative min-w-0 flex-1 truncate px-1 text-sm">{row.label}</div>
-              <span className="relative ml-4 shrink-0 tabular-nums text-sm text-muted-foreground">
+              <span className="relative ms-4 shrink-0 tabular-nums text-sm text-muted-foreground">
                 {row.display ?? formatNumber(row.value)}
               </span>
             </div>

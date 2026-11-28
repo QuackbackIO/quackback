@@ -122,6 +122,45 @@ breaks hydration):
 `locales/__tests__/admin-formats.test.tsx` fails on a format pinned to
 `'en-US'` or left to the runtime default in admin code.
 
+## Right to left
+
+Arabic reads right to left, so the page mirrors: what sits on the left in
+English sits on the right. Flex and grid layouts mirror by themselves; a class
+that names a side does not. Use the logical class, which follows the reading
+direction:
+
+| Instead of                      | Use                             |
+| ------------------------------- | ------------------------------- |
+| `ml-2`, `mr-2`                  | `ms-2`, `me-2`                  |
+| `pl-3`, `pr-3`                  | `ps-3`, `pe-3`                  |
+| `left-0`, `right-0`             | `start-0`, `end-0`              |
+| `text-left`, `text-right`       | `text-start`, `text-end`        |
+| `border-l`, `border-r`          | `border-s`, `border-e`          |
+| `rounded-l-md`, `rounded-tr-md` | `rounded-s-md`, `rounded-se-md` |
+
+Icons that point back or next (`ChevronLeftIcon`, `ChevronRightIcon`,
+`ArrowLeftIcon`, `ArrowRightIcon`) turn round with `rtl:-scale-x-100`. A
+chevron that turns down when open with `rotate-90` also needs
+`rtl:-rotate-90`, because the mirror flips the turn. A down chevron turned
+sideways with `-rotate-90` (pointing next while closed) needs `rtl:rotate-90`
+to point the other way. An icon passed by reference (`icon={ArrowLeft}`) goes
+through a small component that renders it with the mirror.
+
+A sideways move (`translate-x-4`, such as a switch's thumb) needs the opposite
+move beside it, `rtl:-translate-x-4`, in the same class string.
+
+Arrow keys follow what the reader sees: in a row of choices, the Left key
+moves to the choice on the left, which is the next one in right to left. Use
+`arrowStep` from `lib/client/arrow-step.ts`. A colour area or other control
+drawn left to right in both directions keeps the physical keys.
+
+Keep a physical side only where the side really is physical: a box centred
+with `left-1/2 -translate-x-1/2`, a sheet that slides in from the side its
+`side` prop names, a column of numbers aligned to the right.
+
+To see a page right to left before its area is translated, set `dir="rtl"`
+on the page's `<html>` element in the browser's developer tools.
+
 ## Tests
 
 Run these from `apps/web`:
@@ -135,6 +174,9 @@ TMPDIR=~/.cache/vt-tmp npx vitest run src/locales src/components/shared/__tests_
 - `default-messages.test.ts`: the English in code equals `en.json`.
 - `locale-vocabulary.test.ts`: no em dashes, one word per product.
 - `admin-english-ratchet.test.ts`: admin code does not gain English.
+- `admin-direction-ratchet.test.ts`: admin code does not gain left/right
+  classes, direction icons that do not turn round, or sideways moves that go
+  one way.
 
 ### The English ratchet
 
@@ -161,8 +203,19 @@ components/admin/inbox/inbox-filters.tsx has 3 English strings in code (baseline
 Move these strings to the catalog (en.json and the 12 other languages).
 ```
 
-When you move strings to the catalogue, the counts drop and the test asks you
-to lower the baseline:
+The direction ratchet works the same way with `admin-direction-baseline.json`
+and names the logical class to use:
+
+```
+components/admin/settings/team/member-row.tsx has 2 left/right classes, unmirrored icons or one-way moves (baseline 0):
+  line 23 ml-3 use ms-3
+  line 40 text-left use text-start
+```
+
+The baseline keeps the few sides that are physical on purpose.
+
+When you move strings to the catalogue (or switch a class to its logical
+form), the counts drop and the test asks you to lower the baseline:
 
 ```sh
 bun run i18n:baseline

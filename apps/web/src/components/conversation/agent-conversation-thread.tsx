@@ -2017,10 +2017,10 @@ export function AgentConversationThread({
     <button
       type="button"
       onClick={onBack}
-      className="-ml-1 flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted md:hidden"
+      className="-ms-1 flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted md:hidden"
       aria-label="Back to list"
     >
-      <ChevronLeftIcon className="h-5 w-5" />
+      <ChevronLeftIcon className="rtl:-scale-x-100 h-5 w-5" />
     </button>
   )
   const headerIconButtonClass =
@@ -2029,7 +2029,7 @@ export function AgentConversationThread({
   // The unified action bar's icon cluster + overflow + primary button —
   // identical JSX for both kinds, gated internally by `isTicket`/capabilities.
   const headerActions = (
-    <div className="ml-auto flex shrink-0 items-center gap-1">
+    <div className="ms-auto flex shrink-0 items-center gap-1">
       {/* Below the inline panel width the details open in a sheet. */}
       {!detailPanelShown && (conversation || ticket) && (
         <DetailsSheetTrigger
@@ -2187,7 +2187,7 @@ export function AgentConversationThread({
               {conversation && <ChannelBadge channel={conversation.channel} />}
               {conversation && <SlaChip sla={conversation.sla} status={conversation.status} />}
               {conversation?.csatRating != null && (
-                <span className="ml-1.5 text-amber-500">
+                <span className="ms-1.5 text-amber-500">
                   {'★'.repeat(conversation.csatRating)}
                   <span className="text-muted-foreground/50">
                     {'★'.repeat(Math.max(0, 5 - conversation.csatRating))}

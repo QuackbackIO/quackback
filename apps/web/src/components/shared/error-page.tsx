@@ -236,7 +236,7 @@ export function DefaultErrorPage({ error, reset, fullPage = true }: ErrorPagePro
             </p>
 
             {message && (
-              <details className="mt-4 rounded-md border bg-muted/40 px-4 py-3 text-left">
+              <details className="mt-4 rounded-md border bg-muted/40 px-4 py-3 text-start">
                 <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
                   {copy({
                     id: 'common.errorPage.technicalDetails',

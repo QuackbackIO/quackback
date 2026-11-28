@@ -350,13 +350,13 @@ export function TriggerEditor({
                 type="button"
                 onClick={() => onChangeClass(c.value)}
                 className={cn(
-                  'relative w-full rounded-md border px-2.5 py-2 text-left transition-colors',
+                  'relative w-full rounded-md border px-2.5 py-2 text-start transition-colors',
                   selected ? 'border-primary bg-primary/5' : 'hover:bg-muted/40'
                 )}
               >
                 <div className="text-xs font-medium">{c.label}</div>
                 <div className="mt-0.5 text-[11px] text-muted-foreground">{c.description}</div>
-                {selected && <CheckIcon className="absolute top-2 right-2 size-3.5 text-primary" />}
+                {selected && <CheckIcon className="absolute top-2 end-2 size-3.5 text-primary" />}
               </button>
             )
           })}

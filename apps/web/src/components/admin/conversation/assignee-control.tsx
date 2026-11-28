@@ -48,7 +48,7 @@ export function AssigneeMenuItems({
           <Avatar src={m.image} name={m.name ?? m.email} className="size-5 text-xs" />
           <span className="truncate">{m.name ?? m.email}</span>
           {selectedPrincipalId === m.id && (
-            <CheckIcon className="ml-auto h-3.5 w-3.5 text-primary" />
+            <CheckIcon className="ms-auto h-3.5 w-3.5 text-primary" />
           )}
         </DropdownMenuItem>
       ))}

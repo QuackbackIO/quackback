@@ -135,7 +135,7 @@ function Chip({ chip }: { chip: ChipData }) {
       className={cn(
         'inline-flex items-center rounded-md px-2 text-xs font-medium',
         chip.wrap
-          ? 'h-auto min-h-[22px] max-w-full whitespace-normal py-0.5 text-left'
+          ? 'h-auto min-h-[22px] max-w-full whitespace-normal py-0.5 text-start'
           : 'h-[22px] whitespace-nowrap',
         chip.tone ? STEP_TILE : 'bg-muted text-muted-foreground'
       )}
@@ -181,7 +181,7 @@ const StepNode = memo(function StepNode({ data }: NodeProps<Node<StepNodeData, '
         data-step-id={data.stepId}
         onClick={() => actions.onSelect(data.stepId)}
         className={cn(
-          'relative w-[300px] cursor-pointer rounded-xl border bg-card text-left shadow-xs transition-shadow',
+          'relative w-[300px] cursor-pointer rounded-xl border bg-card text-start shadow-xs transition-shadow',
           data.selected
             ? 'border-transparent shadow-md ring-2 ring-ring'
             : data.warn
@@ -192,7 +192,7 @@ const StepNode = memo(function StepNode({ data }: NodeProps<Node<StepNodeData, '
         {data.startTag && (
           <span
             className={cn(
-              'absolute -top-[21px] left-3.5 rounded-t-md px-2.5 py-0.5 text-[10.5px] font-bold',
+              'absolute -top-[21px] start-3.5 rounded-t-md px-2.5 py-0.5 text-[10.5px] font-bold',
               START_TAG
             )}
           >
@@ -200,7 +200,7 @@ const StepNode = memo(function StepNode({ data }: NodeProps<Node<StepNodeData, '
           </span>
         )}
         {data.warn && (
-          <ExclamationTriangleIcon className="absolute top-2.5 right-2.5 size-3.5 text-warning" />
+          <ExclamationTriangleIcon className="absolute top-2.5 end-2.5 size-3.5 text-warning" />
         )}
         <div className="flex items-center gap-2.5 p-3">
           <span
@@ -255,7 +255,7 @@ const StepNode = memo(function StepNode({ data }: NodeProps<Node<StepNodeData, '
           type="button"
           aria-label={`Delete ${data.eyebrow.toLowerCase()} step`}
           onClick={() => (data.nestedCount ? setConfirmOpen(true) : actions.onRemove(data.stepId))}
-          className="pointer-events-none absolute -top-1.5 -right-1.5 flex size-5 items-center justify-center rounded-full border bg-background text-muted-foreground opacity-0 shadow-xs transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 hover:text-destructive focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          className="pointer-events-none absolute -top-1.5 -end-1.5 flex size-5 items-center justify-center rounded-full border bg-background text-muted-foreground opacity-0 shadow-xs transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 hover:text-destructive focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
         >
           <XMarkIcon className="size-3" />
         </button>
@@ -565,7 +565,7 @@ export function WorkflowBuilderCanvas({
         aria-label={showMinimap ? 'Hide minimap' : 'Show minimap'}
         aria-pressed={showMinimap}
         className={cn(
-          'absolute top-3 right-3 z-10 flex size-8 items-center justify-center rounded-lg border bg-card text-muted-foreground shadow-xs transition-colors hover:text-foreground',
+          'absolute top-3 end-3 z-10 flex size-8 items-center justify-center rounded-lg border bg-card text-muted-foreground shadow-xs transition-colors hover:text-foreground',
           showMinimap && 'text-foreground'
         )}
       >

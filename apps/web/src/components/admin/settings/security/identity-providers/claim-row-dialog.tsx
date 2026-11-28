@@ -210,7 +210,7 @@ export function ClaimRowDialog({
                   <SelectContent>
                     {availableTargets.map((item) => (
                       <SelectItem key={item.key} value={`people:${item.key}`}>
-                        <span className="flex flex-col text-left">
+                        <span className="flex flex-col text-start">
                           <span>{item.label}</span>
                           <span className="text-xs font-normal text-muted-foreground">
                             {item.key}, {PEOPLE_TYPE_LABEL[item.attrType] ?? item.attrType}
@@ -258,7 +258,7 @@ export function ClaimRowDialog({
 
         <DialogFooter>
           {mode === 'edit' && profileField && (
-            <Button type="button" variant="outline" className="mr-auto" onClick={resetProfile}>
+            <Button type="button" variant="outline" className="me-auto" onClick={resetProfile}>
               {profileField === 'username'
                 ? 'Use standard claims'
                 : `Use ${OIDC_PROFILE_DEFAULTS[profileField]}`}

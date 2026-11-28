@@ -147,7 +147,7 @@ function DisabledNotice() {
         <Button
           variant="outline"
           size="sm"
-          className="ml-auto shrink-0"
+          className="ms-auto shrink-0"
           onClick={() => void navigate({ to: '/admin/settings/status' })}
         >
           Settings
@@ -213,7 +213,7 @@ function CardShell({
     <section className="rounded-xl border border-border/50 bg-card shadow-sm overflow-hidden">
       <div className="flex items-center gap-2 px-4 py-3 border-b border-border/40">
         <h2 className="text-base font-semibold">{title}</h2>
-        <div className="ml-auto">{action}</div>
+        <div className="ms-auto">{action}</div>
       </div>
       {children}
     </section>
@@ -333,7 +333,7 @@ function LiveRow({ item, meta }: { item: OverviewIncident; meta?: React.ReactNod
         <div className="flex-1 min-w-0">
           <button
             type="button"
-            className="font-semibold text-sm text-left hover:underline underline-offset-2 line-clamp-1"
+            className="font-semibold text-sm text-start hover:underline underline-offset-2 line-clamp-1"
             onClick={() => goToIncident(item.id)}
           >
             {item.title}
@@ -355,7 +355,7 @@ function LiveRow({ item, meta }: { item: OverviewIncident; meta?: React.ReactNod
         </Button>
       </div>
       {latest && (
-        <p className="text-xs text-muted-foreground border-l-2 border-border pl-2.5 ml-1 line-clamp-2">
+        <p className="text-xs text-muted-foreground border-s-2 border-border ps-2.5 ms-1 line-clamp-2">
           <span className="text-foreground/80 font-medium">
             Latest update <TimeAgo date={latest.createdAt} locale="en" />:
           </span>{' '}
@@ -412,7 +412,7 @@ function UpcomingMaintenanceCard({ windows }: { windows: OverviewIncident[] }) {
                 <div className="flex-1 min-w-0">
                   <button
                     type="button"
-                    className="font-semibold text-sm text-left hover:underline underline-offset-2 line-clamp-1"
+                    className="font-semibold text-sm text-start hover:underline underline-offset-2 line-clamp-1"
                     onClick={() => goToIncident(w.id)}
                   >
                     {w.title}
@@ -552,7 +552,7 @@ function ServiceRow({ name, status }: { name: string; status: StatusComponentSta
       />
       <span className="truncate">{name}</span>
       <span
-        className="ml-auto text-xs font-medium shrink-0"
+        className="ms-auto text-xs font-medium shrink-0"
         style={{ color: COMPONENT_STATUS_COLORS[status] }}
       >
         {COMPONENT_STATUS_LABELS[status]}

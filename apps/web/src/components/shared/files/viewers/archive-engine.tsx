@@ -157,10 +157,10 @@ export default function ArchiveEngine({ data, onToolbar, onError }: ViewerEngine
       <table className="w-full border-collapse text-[13px]">
         <thead>
           <tr>
-            <th className="sticky top-0 border-b border-border bg-background px-3.5 py-2 text-left text-[11.5px] font-medium text-muted-foreground">
+            <th className="sticky top-0 border-b border-border bg-background px-3.5 py-2 text-start text-[11.5px] font-medium text-muted-foreground">
               {intl.formatMessage({ id: 'files.archive.columnName', defaultMessage: 'Name' })}
             </th>
-            <th className="sticky top-0 border-b border-border bg-background px-3.5 py-2 text-right text-[11.5px] font-medium text-muted-foreground">
+            <th className="sticky top-0 border-b border-border bg-background px-3.5 py-2 text-end text-[11.5px] font-medium text-muted-foreground">
               {intl.formatMessage({ id: 'files.archive.columnSize', defaultMessage: 'Size' })}
             </th>
           </tr>
@@ -190,7 +190,7 @@ export default function ArchiveEngine({ data, onToolbar, onError }: ViewerEngine
                   </span>
                 </span>
               </td>
-              <td className="w-28 px-3.5 py-1.5 text-right whitespace-nowrap text-muted-foreground tabular-nums">
+              <td className="w-28 px-3.5 py-1.5 text-end whitespace-nowrap text-muted-foreground tabular-nums">
                 {row.dir ? '' : formatBytes(row.size)}
               </td>
             </tr>

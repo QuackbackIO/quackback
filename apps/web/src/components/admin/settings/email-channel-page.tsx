@@ -122,10 +122,10 @@ function EmailActivityCard() {
       ) : (
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-border/50 text-left text-[13px] text-muted-foreground">
+            <tr className="border-b border-border/50 text-start text-[13px] text-muted-foreground">
               <th className="px-4 py-2 font-normal sm:px-6">Message</th>
               <th className="py-2 font-normal">Status</th>
-              <th className="px-4 py-2 text-right font-normal sm:px-6">Time</th>
+              <th className="px-4 py-2 text-end font-normal sm:px-6">Time</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/50">
@@ -137,7 +137,7 @@ function EmailActivityCard() {
                   <span>{row.emailType}</span>
                 </td>
                 <td className="py-2.5">{row.status}</td>
-                <td className="px-4 py-2.5 text-right text-muted-foreground sm:px-6">
+                <td className="px-4 py-2.5 text-end text-muted-foreground sm:px-6">
                   <LocalDate date={row.createdAt} options={NUMERIC_DATE_TIME} />
                 </td>
               </tr>

@@ -199,7 +199,7 @@ export function SettingsListRow({
         {body}
         <ChevronRightIcon
           data-slot="settings-list-chevron"
-          className="size-4 shrink-0 text-muted-foreground/70"
+          className="rtl:-scale-x-100 size-4 shrink-0 text-muted-foreground/70"
         />
       </Link>
     )

@@ -28,7 +28,7 @@ export function UpgradeModal(props: {
           description={description}
           onDismiss={() => props.onOpenChange(false)}
           dismissLabel="Maybe later"
-          className="[&>div:first-child]:pr-6"
+          className="[&>div:first-child]:pe-6"
         />
       </DialogContent>
     </Dialog>

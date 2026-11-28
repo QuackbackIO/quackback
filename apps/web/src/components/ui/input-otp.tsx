@@ -51,7 +51,7 @@ function InputOTPSlot({
       data-active={isActive}
       className={cn(
         'relative flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center text-xl font-medium',
-        'border-y border-r border-input first:rounded-l-md first:border-l last:rounded-r-md',
+        'border-y border-e border-input first:rounded-s-md first:border-s last:rounded-e-md',
         'dark:bg-input/30 shadow-xs outline-none transition-all',
         // z-10 on active so the ring isn't clipped by neighbouring cell borders.
         'data-[active=true]:z-10 data-[active=true]:border-ring data-[active=true]:ring-[3px] data-[active=true]:ring-ring',

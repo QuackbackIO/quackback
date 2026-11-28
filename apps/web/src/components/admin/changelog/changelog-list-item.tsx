@@ -128,7 +128,7 @@ export function ChangelogListItem({
             </>
           )}
           {linkedPosts.length > 0 && (
-            <span className="flex items-center gap-1 text-muted-foreground/50 ml-auto">
+            <span className="flex items-center gap-1 text-muted-foreground/50 ms-auto">
               <LinkIcon className="h-3.5 w-3.5" />
               {linkedPosts.length}
             </span>
@@ -138,7 +138,7 @@ export function ChangelogListItem({
 
       {/* Actions dropdown */}
       <div
-        className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
+        className="absolute end-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
         onClick={(e) => e.stopPropagation()}
       >
         <DropdownMenu>
@@ -149,7 +149,7 @@ export function ChangelogListItem({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={() => onEdit?.(id)}>
-              <PencilIcon className="mr-2 h-4 w-4" />
+              <PencilIcon className="me-2 h-4 w-4" />
               Edit
             </DropdownMenuItem>
             <DropdownMenuSeparator />
@@ -157,7 +157,7 @@ export function ChangelogListItem({
               onClick={() => onDelete?.(id)}
               className="text-destructive focus:text-destructive"
             >
-              <TrashIcon className="mr-2 h-4 w-4" />
+              <TrashIcon className="me-2 h-4 w-4" />
               Delete
             </DropdownMenuItem>
           </DropdownMenuContent>

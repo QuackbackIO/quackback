@@ -302,11 +302,11 @@ export function McpSetupGuide({ endpointUrl }: McpSetupGuideProps) {
               </span>
               <span className="text-xs font-medium text-foreground">Endpoint</span>
             </div>
-            <div className="ml-7">
+            <div className="ms-7">
               <button
                 type="button"
                 onClick={handleCopyEndpoint}
-                className="group flex items-center gap-1.5 w-full text-left"
+                className="group flex items-center gap-1.5 w-full text-start"
               >
                 <code className="flex-1 text-xs font-mono text-foreground bg-muted/30 border border-border/50 rounded px-2 py-1.5 truncate">
                   {endpointUrl}
@@ -330,7 +330,7 @@ export function McpSetupGuide({ endpointUrl }: McpSetupGuideProps) {
               </span>
               <span className="text-xs font-medium text-foreground">Authentication</span>
             </div>
-            <p className="text-[11px] text-muted-foreground ml-7">
+            <p className="text-[11px] text-muted-foreground ms-7">
               Use an{' '}
               <Link
                 to="/admin/settings/developers"
@@ -355,7 +355,7 @@ export function McpSetupGuide({ endpointUrl }: McpSetupGuideProps) {
               </div>
             </div>
 
-            <div className="ml-7 space-y-3">
+            <div className="ms-7 space-y-3">
               {/* Client selector */}
               <div className="flex flex-wrap gap-1">
                 {CLIENTS.map((c) => {
@@ -415,7 +415,7 @@ export function McpSetupGuide({ endpointUrl }: McpSetupGuideProps) {
                   <button
                     type="button"
                     onClick={handleCopyCode}
-                    className="flex items-center gap-1 px-2.5 py-1.5 mr-1 rounded text-[11px] text-white/40 hover:text-white/70 transition-colors"
+                    className="flex items-center gap-1 px-2.5 py-1.5 me-1 rounded text-[11px] text-white/40 hover:text-white/70 transition-colors"
                   >
                     {copiedCode ? (
                       <>

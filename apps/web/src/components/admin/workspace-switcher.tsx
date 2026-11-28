@@ -40,7 +40,7 @@ export function WorkspaceSwitcher({
       <DropdownMenuTrigger asChild>
         <button type="button" data-admin-rail-item="" className={railControlClass()}>
           <ArrowsRightLeftIcon className="size-5 shrink-0" />
-          <span className="min-w-0 flex-1 truncate text-left">Switch workspace</span>
+          <span className="min-w-0 flex-1 truncate text-start">Switch workspace</span>
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" side="right" sideOffset={8} className="w-56">

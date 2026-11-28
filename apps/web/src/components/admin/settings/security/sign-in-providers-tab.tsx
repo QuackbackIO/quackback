@@ -240,7 +240,7 @@ export function SignInProvidersTab({
           {/* Nested under Password: 2FA enforcement builds on top of the password
               (TOTP enrols over it). The left rule and indent mark it as a child
               setting of the Password row, not a peer. */}
-          <div className="ml-1 border-l-2 border-border/60 pl-4">
+          <div className="ms-1 border-s-2 border-border/60 ps-4">
             <MethodRow
               muted={!passwordEnabled}
               label="Require two-factor authentication"

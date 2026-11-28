@@ -246,7 +246,7 @@ export function ChangelogModalContent({ entryId, onClose }: ChangelogModalConten
           <Sheet open={mobileSettingsOpen} onOpenChange={setMobileSettingsOpen}>
             <SheetTrigger asChild>
               <Button type="button" variant="outline" size="sm" className="lg:hidden">
-                <Cog6ToothIcon className="h-4 w-4 mr-1.5" />
+                <Cog6ToothIcon className="h-4 w-4 me-1.5" />
                 Settings
               </Button>
             </SheetTrigger>

@@ -167,7 +167,7 @@ export function MemberActions({
             >
               <ShieldCheckIcon className="h-4 w-4" />
               Admin
-              {isCurrent({ role: 'admin' }) && <CheckIcon className="ml-auto h-3.5 w-3.5" />}
+              {isCurrent({ role: 'admin' }) && <CheckIcon className="ms-auto h-3.5 w-3.5" />}
             </DropdownMenuItem>
           )}
           <DropdownMenuItem
@@ -177,7 +177,7 @@ export function MemberActions({
           >
             <UserIcon className="h-4 w-4" />
             Member
-            {isCurrent({ role: 'member' }) && <CheckIcon className="ml-auto h-3.5 w-3.5" />}
+            {isCurrent({ role: 'member' }) && <CheckIcon className="ms-auto h-3.5 w-3.5" />}
           </DropdownMenuItem>
           {customRoles.length > 0 && (
             <>
@@ -190,7 +190,7 @@ export function MemberActions({
                 >
                   {r.name}
                   {isCurrent({ role: 'member', roleId: r.id }) && (
-                    <CheckIcon className="ml-auto h-3.5 w-3.5" />
+                    <CheckIcon className="ms-auto h-3.5 w-3.5" />
                   )}
                 </DropdownMenuItem>
               ))}

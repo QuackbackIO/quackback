@@ -68,7 +68,7 @@ export function FreshdeskConnectionActions({
         >
           {disconnecting ? (
             <>
-              <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
+              <ArrowPathIcon className="me-2 h-4 w-4 animate-spin" />
               Disconnecting...
             </>
           ) : (
@@ -142,7 +142,7 @@ export function FreshdeskConnectionActions({
         <Button onClick={handleSave} disabled={saving || !subdomainValue.trim() || !apiKey.trim()}>
           {saving ? (
             <>
-              <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
+              <ArrowPathIcon className="me-2 h-4 w-4 animate-spin" />
               Saving...
             </>
           ) : (

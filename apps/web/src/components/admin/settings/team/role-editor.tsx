@@ -294,7 +294,7 @@ export function RoleEditor(props: RoleEditorProps) {
                 />
                 <button
                   type="button"
-                  className="flex flex-1 items-center gap-2 text-left"
+                  className="flex flex-1 items-center gap-2 text-start"
                   aria-expanded={isOpen}
                   onClick={() =>
                     setOpenCats((prev) => {
@@ -311,7 +311,7 @@ export function RoleEditor(props: RoleEditorProps) {
                       New
                     </Badge>
                   )}
-                  <span className="ml-auto text-[13px] text-muted-foreground tabular-nums">
+                  <span className="ms-auto text-[13px] text-muted-foreground tabular-nums">
                     {grantedCount} of {inCategory.length}
                   </span>
                 </button>
@@ -326,7 +326,7 @@ export function RoleEditor(props: RoleEditorProps) {
                       <li
                         key={p.key}
                         className={cn(
-                          'flex items-center gap-3 py-1.5 pl-10 pr-4 text-[13px] sm:pl-12 sm:pr-6',
+                          'flex items-center gap-3 py-1.5 ps-10 pe-4 text-[13px] sm:ps-12 sm:pe-6',
                           aboveCeiling && 'opacity-50'
                         )}
                       >
@@ -345,7 +345,7 @@ export function RoleEditor(props: RoleEditorProps) {
                           </Badge>
                         )}
                         {aboveCeiling && (
-                          <span className="ml-auto hidden text-right text-xs text-muted-foreground sm:block">
+                          <span className="ms-auto hidden text-end text-xs text-muted-foreground sm:block">
                             You don't hold this
                           </span>
                         )}
@@ -383,7 +383,7 @@ export function RoleEditor(props: RoleEditorProps) {
               <Button
                 variant="outline-destructive"
                 size="sm"
-                className="mr-auto"
+                className="me-auto"
                 onClick={() => setDeleteOpen(true)}
               >
                 Delete role

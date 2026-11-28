@@ -74,17 +74,17 @@ export function SidebarSearch({
   return (
     <div>
       <div className="relative">
-        <SearchIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+        <SearchIcon className="absolute start-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
         <Input
           placeholder="Search posts..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          className="h-9 pl-8 pr-8 text-sm"
+          className="h-9 ps-8 pe-8 text-sm"
         />
         {isActive && (
           <button
             onClick={clearSearch}
-            className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground"
+            className="absolute end-2.5 top-2.5 text-muted-foreground hover:text-foreground"
           >
             <XIcon className="h-4 w-4" />
           </button>
@@ -95,7 +95,7 @@ export function SidebarSearch({
         <div className="mt-3">
           {loading ? (
             <div className="flex items-center justify-center py-4 text-sm text-muted-foreground">
-              <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />
+              <Loader2Icon className="me-2 h-4 w-4 animate-spin" />
               Searching...
             </div>
           ) : results.length > 0 ? (

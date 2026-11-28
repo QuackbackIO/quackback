@@ -178,7 +178,7 @@ function TreeRow({
       <button
         type="button"
         onClick={onNavigate}
-        className="flex-1 min-w-0 flex items-center gap-2 pr-1 text-left h-full"
+        className="flex-1 min-w-0 flex items-center gap-2 pe-1 text-start h-full"
       >
         <CategoryIcon icon={category.icon} className="w-4 h-4 shrink-0 text-muted-foreground" />
         <span className="truncate">{category.name}</span>
@@ -191,7 +191,10 @@ function TreeRow({
           aria-label={isExpanded ? 'Collapse' : 'Expand'}
         >
           <ChevronRightIcon
-            className={cn('h-3.5 w-3.5 transition-transform', isExpanded && 'rotate-90')}
+            className={cn(
+              'rtl:-scale-x-100 h-3.5 w-3.5 transition-transform',
+              isExpanded && 'rotate-90 rtl:-rotate-90'
+            )}
           />
         </button>
       )}
@@ -205,7 +208,7 @@ function TreeRow({
       >
         {formatCategoryCount(category.articleCount, category.recursiveArticleCount)}
       </span>
-      <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+      <div className="absolute end-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
         {canAddSub && (
           <button
             type="button"

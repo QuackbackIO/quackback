@@ -18,7 +18,7 @@ interface FilterListProps<T extends { id: string; name: string; icon?: RowIcon }
 const FilterCount = memo(function FilterCount({ count }: { count: number | undefined }) {
   if (count == null) return null
   return (
-    <span className="ml-auto shrink-0 text-[11px] tabular-nums text-muted-foreground">{count}</span>
+    <span className="ms-auto shrink-0 text-[11px] tabular-nums text-muted-foreground">{count}</span>
   )
 })
 
@@ -61,7 +61,7 @@ export function FilterList<T extends { id: string; name: string; icon?: RowIcon 
             ) : (
               <>
                 {item.icon && <item.icon className={MENU_ICON} aria-hidden="true" />}
-                <span className="min-w-0 flex-1 truncate text-left">{item.name}</span>
+                <span className="min-w-0 flex-1 truncate text-start">{item.name}</span>
               </>
             )}
             <FilterCount count={count} />

@@ -270,7 +270,7 @@ function VerificationCard() {
               </span>
               <span className="text-xs font-medium text-foreground">How it works</span>
             </div>
-            <div className="ml-7 space-y-2">
+            <div className="ms-7 space-y-2">
               <p className="text-[11px] text-muted-foreground">
                 Each delivery includes an HMAC-SHA256 signature computed from your signing secret.
                 Verify the signature and check the timestamp to prevent replay attacks.
@@ -299,7 +299,7 @@ function VerificationCard() {
               </span>
               <span className="text-xs font-medium text-foreground">Events</span>
             </div>
-            <div className="ml-7 flex flex-wrap gap-1">
+            <div className="ms-7 flex flex-wrap gap-1">
               {WEBHOOK_EVENTS.map((event) => (
                 <span
                   key={event.id}
@@ -324,7 +324,7 @@ function VerificationCard() {
               </div>
             </div>
 
-            <div className="ml-7">
+            <div className="ms-7">
               <div className="flex flex-wrap gap-1">
                 {FRAMEWORKS.map((f) => {
                   const Icon = FRAMEWORK_ICONS[f.id]
@@ -378,7 +378,7 @@ function VerificationCard() {
             <button
               type="button"
               onClick={handleCopyCode}
-              className="flex items-center gap-1 px-2.5 py-1.5 mr-1 rounded text-[11px] text-white/40 hover:text-white/70 transition-colors"
+              className="flex items-center gap-1 px-2.5 py-1.5 me-1 rounded text-[11px] text-white/40 hover:text-white/70 transition-colors"
             >
               {copiedCode ? (
                 <>

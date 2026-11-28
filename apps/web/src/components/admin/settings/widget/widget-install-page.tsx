@@ -220,7 +220,7 @@ function InstallSection({
 }) {
   return (
     <Collapsible>
-      <CollapsibleTrigger className="group flex w-full items-center justify-between gap-3 px-4 py-3 text-left sm:px-6">
+      <CollapsibleTrigger className="group flex w-full items-center justify-between gap-3 px-4 py-3 text-start sm:px-6">
         <span>
           <span className="block text-sm font-medium">{title}</span>
           {description && (

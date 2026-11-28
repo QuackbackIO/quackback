@@ -149,7 +149,7 @@ export function IntegrationSyncHistory({ provider }: { provider: string }) {
                   aria-expanded={item.sourceTitle ? expanded === item.id : undefined}
                   aria-controls={item.sourceTitle ? `sync-detail-${item.id}` : undefined}
                   onClick={() => setExpanded(expanded === item.id ? null : item.id)}
-                  className="min-w-0 basis-full rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:basis-60 sm:flex-1"
+                  className="min-w-0 basis-full rounded-sm text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:basis-60 sm:flex-1"
                 >
                   <span className="flex items-center gap-2 text-sm font-medium">
                     {item.sourceTitle && (

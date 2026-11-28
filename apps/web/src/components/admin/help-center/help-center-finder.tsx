@@ -381,7 +381,7 @@ function DeletedItemsView() {
                   onClick={() => restoreCategoryMutation.mutate(cat.id)}
                   disabled={restoreCategoryMutation.isPending}
                 >
-                  <ArrowUturnLeftIcon className="h-3.5 w-3.5 mr-1" />
+                  <ArrowUturnLeftIcon className="h-3.5 w-3.5 me-1" />
                   Restore
                 </Button>
               </div>
@@ -406,7 +406,7 @@ function DeletedItemsView() {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-foreground truncate">{article.title}</p>
                   <p className="text-xs text-muted-foreground">
-                    <span className="mr-2">{article.category.name}</span>
+                    <span className="me-2">{article.category.name}</span>
                     {article.deletedAt && (
                       <>
                         &middot; Deleted <TimeAgo date={article.deletedAt} locale="en" />
@@ -420,7 +420,7 @@ function DeletedItemsView() {
                   onClick={() => restoreArticleMutation.mutate(article.id as KbArticleId)}
                   disabled={restoreArticleMutation.isPending}
                 >
-                  <ArrowUturnLeftIcon className="h-3.5 w-3.5 mr-1" />
+                  <ArrowUturnLeftIcon className="h-3.5 w-3.5 me-1" />
                   Restore
                 </Button>
               </div>
@@ -451,12 +451,12 @@ function CategoryActionsDropdown({ onEdit, onDelete }: CategoryActionsDropdownPr
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuItem onClick={onEdit}>
-          <PencilIcon className="h-4 w-4 mr-2" />
+          <PencilIcon className="h-4 w-4 me-2" />
           Edit category
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
-          <TrashIcon className="h-4 w-4 mr-2" />
+          <TrashIcon className="h-4 w-4 me-2" />
           Delete category
         </DropdownMenuItem>
       </DropdownMenuContent>

@@ -180,7 +180,7 @@ export function AdminAuthorHoverCard({
                 className="mt-3 flex w-full items-center justify-between border-t border-border/50 pt-2.5 text-primary"
               >
                 <span className="text-xs font-medium">Open full profile</span>
-                <ArrowRightIcon className="size-3.5" />
+                <ArrowRightIcon className="rtl:-scale-x-100 size-3.5" />
               </button>
             )}
           </div>

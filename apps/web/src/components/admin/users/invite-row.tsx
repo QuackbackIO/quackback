@@ -149,7 +149,7 @@ export function InviteRow({ invite, onRevoke, onResend, revoking, resending }: I
               title="Mint a fresh sign-in link and copy it to your clipboard"
             >
               {copyState === 'copying' && (
-                <ArrowPathIcon className="mr-1 h-3.5 w-3.5 animate-spin" />
+                <ArrowPathIcon className="me-1 h-3.5 w-3.5 animate-spin" />
               )}
               {copyState === 'copied'
                 ? 'Link copied'

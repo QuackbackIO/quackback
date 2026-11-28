@@ -113,9 +113,9 @@ export function AnalyticsSlaCards({ range }: { range: DateRange }) {
               <TableHeader>
                 <TableRow>
                   <TableHead>Target</TableHead>
-                  <TableHead className="text-right">Met</TableHead>
-                  <TableHead className="text-right">Missed</TableHead>
-                  <TableHead className="text-right">Attained</TableHead>
+                  <TableHead className="text-end">Met</TableHead>
+                  <TableHead className="text-end">Missed</TableHead>
+                  <TableHead className="text-end">Attained</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -124,9 +124,9 @@ export function AnalyticsSlaCards({ range }: { range: DateRange }) {
                   return (
                     <TableRow key={c.key}>
                       <TableCell>{c.label}</TableCell>
-                      <TableCell className="text-right tabular-nums">{clock.met}</TableCell>
-                      <TableCell className="text-right tabular-nums">{clock.breached}</TableCell>
-                      <TableCell className="text-right tabular-nums">
+                      <TableCell className="text-end tabular-nums">{clock.met}</TableCell>
+                      <TableCell className="text-end tabular-nums">{clock.breached}</TableCell>
+                      <TableCell className="text-end tabular-nums">
                         {rateLabel(clock.rate)}
                       </TableCell>
                     </TableRow>
@@ -140,7 +140,7 @@ export function AnalyticsSlaCards({ range }: { range: DateRange }) {
                   <TableRow>
                     <TableHead>Policy</TableHead>
                     {CLOCKS.map((c) => (
-                      <TableHead key={c.key} className="text-right">
+                      <TableHead key={c.key} className="text-end">
                         {c.label}
                       </TableHead>
                     ))}
@@ -151,7 +151,7 @@ export function AnalyticsSlaCards({ range }: { range: DateRange }) {
                     <TableRow key={p.policyId}>
                       <TableCell className="max-w-40 truncate">{p.policyName}</TableCell>
                       {CLOCKS.map((c) => (
-                        <TableCell key={c.key} className="text-right tabular-nums">
+                        <TableCell key={c.key} className="text-end tabular-nums">
                           {rateLabel(p[c.key].rate)}
                         </TableCell>
                       ))}
@@ -175,7 +175,7 @@ export function AnalyticsSlaCards({ range }: { range: DateRange }) {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Outcome</TableHead>
-                    <TableHead className="text-right">Runs</TableHead>
+                    <TableHead className="text-end">Runs</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -189,7 +189,7 @@ export function AnalyticsSlaCards({ range }: { range: DateRange }) {
                   ).map(([label, value]) => (
                     <TableRow key={label}>
                       <TableCell>{label}</TableCell>
-                      <TableCell className="text-right tabular-nums">{value}</TableCell>
+                      <TableCell className="text-end tabular-nums">{value}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -219,8 +219,8 @@ export function AnalyticsSlaCards({ range }: { range: DateRange }) {
               <TableHeader>
                 <TableRow>
                   <TableHead>Target</TableHead>
-                  <TableHead className="text-right">Misses</TableHead>
-                  <TableHead className="text-right">Average overdue</TableHead>
+                  <TableHead className="text-end">Misses</TableHead>
+                  <TableHead className="text-end">Average overdue</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -229,8 +229,8 @@ export function AnalyticsSlaCards({ range }: { range: DateRange }) {
                   return (
                     <TableRow key={c.key}>
                       <TableCell>{c.label}</TableCell>
-                      <TableCell className="text-right tabular-nums">{m.count}</TableCell>
-                      <TableCell className="text-right tabular-nums">
+                      <TableCell className="text-end tabular-nums">{m.count}</TableCell>
+                      <TableCell className="text-end tabular-nums">
                         {m.avgOverdueSecs == null
                           ? '-'
                           : formatSlaCountdown(m.avgOverdueSecs * 1000)}

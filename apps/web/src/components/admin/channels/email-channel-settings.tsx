@@ -268,7 +268,7 @@ function InboundRouteSection({
       ) : null}
 
       <div className="mt-4 flex items-center justify-between border-t border-border/40 pt-4">
-        <div className="pr-4">
+        <div className="pe-4">
           <p className="text-sm font-medium">Unverified senders</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
             Quarantine moves email that fails authentication to Spam. Accept lets it in, marked

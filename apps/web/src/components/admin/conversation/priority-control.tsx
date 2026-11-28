@@ -58,7 +58,7 @@ export function PriorityMenuItems({
             style={{ backgroundColor: opt.color }}
           />
           {opt.label}
-          {opt.value === selected && <CheckIcon className="ml-auto h-3.5 w-3.5 text-primary" />}
+          {opt.value === selected && <CheckIcon className="ms-auto h-3.5 w-3.5 text-primary" />}
         </DropdownMenuItem>
       ))}
     </>

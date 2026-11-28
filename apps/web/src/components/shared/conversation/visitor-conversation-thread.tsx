@@ -1507,7 +1507,7 @@ export function VisitorConversationThread({
                 key={a.slug}
                 type="button"
                 onClick={() => helpSearch?.onSelect(a.slug)}
-                className="flex items-center gap-1.5 rounded-md border border-border/50 bg-muted/20 px-2 py-1.5 text-left text-xs hover:bg-muted/40 transition-colors"
+                className="flex items-center gap-1.5 rounded-md border border-border/50 bg-muted/20 px-2 py-1.5 text-start text-xs hover:bg-muted/40 transition-colors"
               >
                 <BookOpenIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 <span className="truncate">{a.title}</span>

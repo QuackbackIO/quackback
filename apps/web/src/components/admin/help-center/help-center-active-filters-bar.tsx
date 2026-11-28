@@ -100,7 +100,7 @@ export function HelpCenterActiveFiltersBar({
         <button
           type="button"
           onClick={onClearAll}
-          className="ml-1 text-[13px] text-muted-foreground hover:text-foreground underline underline-offset-2"
+          className="ms-1 text-[13px] text-muted-foreground hover:text-foreground underline underline-offset-2"
         >
           Clear all
         </button>

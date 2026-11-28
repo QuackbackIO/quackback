@@ -44,7 +44,7 @@ function QuackbackEmbedNodeView({ node, selected, deleteNode }: ReactNodeViewPro
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => deleteNode()}
         className={cn(
-          'absolute -right-2 -top-2 flex size-5 items-center justify-center rounded-full border border-border bg-background text-muted-foreground shadow-sm transition-opacity hover:text-foreground',
+          'absolute -end-2 -top-2 flex size-5 items-center justify-center rounded-full border border-border bg-background text-muted-foreground shadow-sm transition-opacity hover:text-foreground',
           'opacity-0 group-hover:opacity-100 focus:opacity-100',
           selected && 'opacity-100'
         )}

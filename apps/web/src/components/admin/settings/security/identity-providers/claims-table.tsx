@@ -60,15 +60,15 @@ export function ClaimsTable({
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-border/50 text-left text-muted-foreground">
-              <th scope="col" className="py-2 pr-3 font-medium whitespace-nowrap">
+            <tr className="border-b border-border/50 text-start text-muted-foreground">
+              <th scope="col" className="py-2 pe-3 font-medium whitespace-nowrap">
                 Field
               </th>
-              <th scope="col" className="min-w-0 py-2 pr-3 font-medium">
+              <th scope="col" className="min-w-0 py-2 pe-3 font-medium">
                 {providerLabel ? `${providerLabel} claim` : 'Provider claim'}
               </th>
               {showTest && (
-                <th scope="col" className="py-2 pr-3 font-medium whitespace-nowrap">
+                <th scope="col" className="py-2 pe-3 font-medium whitespace-nowrap">
                   Last test sign-in
                 </th>
               )}
@@ -188,7 +188,7 @@ function IconButton({
 
 /** An empty cell in the test column, for rows that are not profile fields. */
 function NoTestValue({ show }: { show: boolean }) {
-  return show ? <td className="py-2.5 pr-3" /> : null
+  return show ? <td className="py-2.5 pe-3" /> : null
 }
 
 /**
@@ -228,20 +228,20 @@ function ProfileRow({
 }) {
   return (
     <tr className="border-b border-border/50 last:border-0 align-top">
-      <td className="py-2.5 pr-3">
+      <td className="py-2.5 pe-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-medium">{row.label}</span>
           {!row.isDefault && <CustomBadge />}
         </div>
         <p className="mt-0.5 text-xs whitespace-nowrap text-muted-foreground">{row.hint}</p>
       </td>
-      <td className="py-2.5 pr-3">
+      <td className="py-2.5 pe-3">
         <ClaimPath>{row.path}</ClaimPath>
       </td>
       {testValues && (
         // max-w-0 with w-full gives this column the remaining width, so long
         // values truncate instead of widening the table.
-        <td className="w-full max-w-0 py-2.5 pr-3">
+        <td className="w-full max-w-0 py-2.5 pe-3">
           <TestValue field={row.field} values={testValues} />
         </td>
       )}
@@ -269,7 +269,7 @@ function PeopleRowView({
 }) {
   return (
     <tr className="border-b border-border/50 last:border-0 align-top">
-      <td className="py-2.5 pr-3">
+      <td className="py-2.5 pe-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-medium">{row.label}</span>
           {row.typeLabel && <span className="text-muted-foreground">{row.typeLabel}</span>}
@@ -285,7 +285,7 @@ function PeopleRowView({
           )}
         </div>
       </td>
-      <td className="py-2.5 pr-3">
+      <td className="py-2.5 pe-3">
         <ClaimPath>{row.claimPath}</ClaimPath>
       </td>
       <NoTestValue show={showTest} />
@@ -311,11 +311,11 @@ function PeopleRowView({
 function UnsupportedRowView({ row, showTest }: { row: ClaimsUnsupportedRow; showTest: boolean }) {
   return (
     <tr className="border-b border-border/50 last:border-0 align-top">
-      <td className="py-2.5 pr-3">
+      <td className="py-2.5 pe-3">
         <div className="font-medium">{row.label}</div>
         <p className="mt-0.5 text-muted-foreground">{row.detail}</p>
       </td>
-      <td className="py-2.5 pr-3 text-muted-foreground">Not editable here</td>
+      <td className="py-2.5 pe-3 text-muted-foreground">Not editable here</td>
       <NoTestValue show={showTest} />
       <td className="py-2.5" />
     </tr>

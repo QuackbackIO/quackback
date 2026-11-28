@@ -141,7 +141,7 @@ export function ReportIncidentDialog({
       {!isControlled && (
         <DialogTrigger asChild>
           <Button size="sm" variant={variant}>
-            <PlusIcon className="h-4 w-4 mr-1.5" />
+            <PlusIcon className="h-4 w-4 me-1.5" />
             Report incident
           </Button>
         </DialogTrigger>
@@ -263,7 +263,7 @@ export function ReportIncidentDialog({
           <DialogFooter className="sm:justify-between gap-2">
             <button
               type="button"
-              className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground text-left"
+              className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground text-start"
               onClick={() => setBackfill((b) => !b)}
             >
               {backfill ? 'Report a live incident instead' : 'Log a past incident instead'}

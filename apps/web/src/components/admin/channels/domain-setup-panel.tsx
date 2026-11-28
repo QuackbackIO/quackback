@@ -106,7 +106,7 @@ export function DomainSetupPanel({
             line itself: it is what changes when someone presses Check now. The
             line wraps within its own space, so the actions stay side by side. */}
         <span
-          className="mr-auto min-w-48 flex-1"
+          className="me-auto min-w-48 flex-1"
           title={phase === 'live' ? checkedTitle : undefined}
         >
           {phase === 'live'

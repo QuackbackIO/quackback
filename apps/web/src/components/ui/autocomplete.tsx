@@ -88,7 +88,7 @@ export function Autocomplete({
           <span className={cn('truncate', !value && 'text-muted-foreground')}>
             {value || placeholder || 'Select…'}
           </span>
-          <ChevronUpDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          <ChevronUpDownIcon className="ms-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-(--anchor-width) p-0">
@@ -122,7 +122,7 @@ export function Autocomplete({
                     >
                       <CheckIcon
                         className={cn(
-                          'mr-2 h-4 w-4',
+                          'me-2 h-4 w-4',
                           s.value === value ? 'opacity-100' : 'opacity-0'
                         )}
                       />

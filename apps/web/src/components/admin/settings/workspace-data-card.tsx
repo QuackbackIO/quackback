@@ -15,7 +15,7 @@ export function WorkspaceDataCard() {
           control={
             <Button variant="outline" size="sm" asChild>
               <Link to="/admin/settings/imports">
-                <ArrowRightIcon className="size-4" />
+                <ArrowRightIcon className="rtl:-scale-x-100 size-4" />
                 Imports &amp; exports
               </Link>
             </Button>

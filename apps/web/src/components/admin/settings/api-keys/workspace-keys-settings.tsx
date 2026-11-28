@@ -138,12 +138,12 @@ export function WorkspaceKeysSettings({ apiKeys }: { apiKeys: ManagedApiKey[] })
           <KeyTable>
             <thead>
               <tr>
-                <KeyTableHead className="pl-4 sm:pl-6">{intl.formatMessage(m.name)}</KeyTableHead>
+                <KeyTableHead className="ps-4 sm:ps-6">{intl.formatMessage(m.name)}</KeyTableHead>
                 <KeyTableHead>{intl.formatMessage(m.role)}</KeyTableHead>
                 <KeyTableHead>{intl.formatMessage(m.scopes)}</KeyTableHead>
                 <KeyTableHead>{intl.formatMessage(m.createdBy)}</KeyTableHead>
                 <KeyTableHead>{intl.formatMessage(m.lastUsed)}</KeyTableHead>
-                <KeyTableHead className="w-10 pr-4 sm:pr-6">
+                <KeyTableHead className="w-10 pe-4 sm:pe-6">
                   <span className="sr-only">{intl.formatMessage(m.actions)}</span>
                 </KeyTableHead>
               </tr>
@@ -151,7 +151,7 @@ export function WorkspaceKeysSettings({ apiKeys }: { apiKeys: ManagedApiKey[] })
             <tbody>
               {apiKeys.map((key) => (
                 <tr key={key.id} className="group">
-                  <KeyTableCell className="pl-4 sm:pl-6">
+                  <KeyTableCell className="ps-4 sm:ps-6">
                     <div className="flex items-center gap-2 font-medium">
                       {key.name}
                       {isKeyExpired(key) && <ExpiredTag label={intl.formatMessage(m.expired)} />}
@@ -177,7 +177,7 @@ export function WorkspaceKeysSettings({ apiKeys }: { apiKeys: ManagedApiKey[] })
                       ? formatDistanceToNow(key.lastUsedAt, { addSuffix: true })
                       : intl.formatMessage(m.never)}
                   </KeyTableCell>
-                  <KeyTableCell className="pr-4 text-right sm:pr-6">
+                  <KeyTableCell className="pe-4 text-end sm:pe-6">
                     <RowActions label={key.name} items={rowActions(key)} />
                   </KeyTableCell>
                 </tr>

@@ -80,7 +80,7 @@ export function CompactPostCard({
           <div className="flex items-center gap-2 text-[11px] text-muted-foreground/60 mt-1.5">
             {boardName && (
               <>
-                <Squares2X2Icon className="h-3 w-3 shrink-0 text-muted-foreground/40 -mr-1 mb-0.5" />
+                <Squares2X2Icon className="h-3 w-3 shrink-0 text-muted-foreground/40 -me-1 mb-0.5" />
                 <span className="truncate">{boardName}</span>
               </>
             )}
@@ -99,7 +99,7 @@ export function CompactPostCard({
               </>
             )}
             {commentCount != null && commentCount > 0 && (
-              <span className="flex items-center gap-0.5 ml-auto shrink-0">
+              <span className="flex items-center gap-0.5 ms-auto shrink-0">
                 <ChatBubbleLeftIcon className="h-3 w-3" />
                 {commentCount}
               </span>
@@ -111,7 +111,7 @@ export function CompactPostCard({
   )
 
   const baseClassName = cn(
-    'min-w-0 w-full rounded-md border bg-muted/30 p-2.5 text-left',
+    'min-w-0 w-full rounded-md border bg-muted/30 p-2.5 text-start',
     dashed ? 'border-dashed border-border/60' : 'border-border/60',
     onClick && 'cursor-pointer transition-colors hover:bg-muted/50 hover:border-border',
     className

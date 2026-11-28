@@ -111,7 +111,7 @@ export function TicketStatusControl({
               </span>
             )}
             {s.id === ticket.status.id && (
-              <CheckIcon className="ml-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+              <CheckIcon className="ms-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
             )}
           </DropdownMenuItem>
         ))}
@@ -195,7 +195,7 @@ export function TicketAssigneeControl({
                 />
                 <span className="min-w-0 flex-1 truncate">{t.name}</span>
                 {assignee.teamId === t.id && (
-                  <CheckIcon className="ml-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                  <CheckIcon className="ms-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
                 )}
               </DropdownMenuItem>
             ))}

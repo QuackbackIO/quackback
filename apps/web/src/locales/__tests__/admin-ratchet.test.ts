@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { compareWithBaseline, lowerBaseline, type Finding } from './admin-ratchet'
 import { scanEnglish } from './admin-english-scan'
+import { logicalClass, scanDirection } from './admin-direction-scan'
 
 const texts = (source: string, file = 'x.tsx') => scanEnglish(source, file).map(({ text }) => text)
 
@@ -124,5 +125,102 @@ describe('the baseline', () => {
         { 'down.tsx': 1, 'up.tsx': 5, 'new.tsx': 2 }
       )
     ).toEqual({ 'down.tsx': 1, 'up.tsx': 2 })
+  })
+})
+
+describe('the direction scan', () => {
+  const found = (source: string) => scanDirection(source, 'x.tsx').map(({ text }) => text)
+
+  it('gives the logical form of each left/right class, with its variants', () => {
+    expect(logicalClass('ml-2')).toBe('ms-2')
+    expect(logicalClass('-mr-1.5')).toBe('-me-1.5')
+    expect(logicalClass('sm:pl-[18px]')).toBe('sm:ps-[18px]')
+    expect(logicalClass('group-hover:right-0')).toBe('group-hover:end-0')
+    expect(logicalClass('[&>svg]:left-1/2')).toBe('[&>svg]:start-1/2')
+    expect(logicalClass('text-right')).toBe('text-end')
+    expect(logicalClass('border-l')).toBe('border-s')
+    expect(logicalClass('border-r-2')).toBe('border-e-2')
+    expect(logicalClass('!border-l-transparent')).toBe('!border-s-transparent')
+    expect(logicalClass('rounded-tl-md')).toBe('rounded-ss-md')
+    expect(logicalClass('rounded-r')).toBe('rounded-e')
+    expect(logicalClass('ml-auto!')).toBe('ms-auto!')
+  })
+
+  it('leaves words and other classes alone', () => {
+    for (const token of [
+      'left',
+      'right',
+      'left-click',
+      'mx-2',
+      'ms-2',
+      'text-left-ish',
+      'ml',
+      'text-left-2',
+    ]) {
+      expect(logicalClass(token)).toBeNull()
+    }
+  })
+
+  it('finds classes in strings and templates, not in prose or comments', () => {
+    expect(
+      found(
+        `// ml-2 in a comment
+         const a = <div className={cn('flex ml-2', open && \`pr-3 \${x}\`)}>3 days left</div>`
+      )
+    ).toEqual(['ml-2 use ms-2', 'pr-3 use pe-3'])
+  })
+
+  it('finds direction icons that do not turn round in a right-to-left page', () => {
+    expect(
+      found(
+        `const a = <>
+          <ChevronRightIcon className="size-4" />
+          <ArrowLeftIcon />
+          <ChevronLeftIcon className="rtl:-scale-x-100 size-4" />
+          <ChevronRightIcon className={cn('size-3', 'rtl:rotate-180')} />
+          <ChevronDownIcon className="size-4" />
+        </>`
+      )
+    ).toEqual(['<ChevronRightIcon> add rtl:-scale-x-100', '<ArrowLeftIcon> add rtl:-scale-x-100'])
+  })
+
+  it('finds direction icons passed by reference, not imports, keys or key names', () => {
+    expect(
+      found(
+        `import { ArrowLeft, ChevronRightIcon } from 'lucide-react'
+         const keys = { ArrowLeft: -1, ArrowRight: 1 }
+         const a = <ToolbarButton icon={ArrowLeft} />
+         const b = { icon: ChevronRightIcon }`
+      )
+    ).toEqual([
+      'ArrowLeft passed by reference: pass a component that renders it with rtl:-scale-x-100',
+      'ChevronRightIcon passed by reference: pass a component that renders it with rtl:-scale-x-100',
+    ])
+  })
+
+  it('finds a chevron turned a quarter with no rtl: turn beside it', () => {
+    expect(
+      found(
+        `const a = <>
+          <ChevronDownIcon className={\`size-3 \${open ? '' : '-rotate-90'}\`} />
+          <ChevronDownIcon className={open ? '' : '-rotate-90 rtl:rotate-90'} />
+          <ChevronRightIcon className={cn('rtl:-scale-x-100', open && 'rotate-90 rtl:-rotate-90')} />
+          <ChevronDownIcon className={cn(open && 'rotate-180')} />
+        </>`
+      )
+    ).toEqual(['<ChevronDownIcon> add an rtl: turn the other way'])
+  })
+
+  it('finds a sideways move with no rtl: move in the same classes', () => {
+    expect(
+      found(
+        `const a = 'data-checked:translate-x-4 data-unchecked:translate-x-0'
+         const b = 'data-checked:translate-x-4 rtl:data-checked:-translate-x-4'
+         const c = 'left-1/2 -translate-x-1/2 translate-x-0 -translate-x-[50%]'`
+      )
+    ).toEqual([
+      'data-checked:translate-x-4 add an rtl: move the other way',
+      'left-1/2 use start-1/2',
+    ])
   })
 })

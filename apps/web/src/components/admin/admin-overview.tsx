@@ -363,7 +363,7 @@ function OverviewEntityRow({
   return (
     <OverviewNavLink
       link={link}
-      className="flex w-full min-w-0 items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-muted/40 sm:px-4"
+      className="flex w-full min-w-0 items-center gap-3 px-3 py-3 text-start transition-colors hover:bg-muted/40 sm:px-4"
     >
       <EntityIcon entity={entity} className="mt-0.5 self-start" />
       <span className="min-w-0 flex-1">

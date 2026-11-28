@@ -39,7 +39,9 @@ export function Breadcrumbs({ segments, className }: BreadcrumbsProps) {
                 {segment.label}
               </span>
             )}
-            {!isLast ? <ChevronRightIcon className="h-3.5 w-3.5 text-muted-foreground/60" /> : null}
+            {!isLast ? (
+              <ChevronRightIcon className="rtl:-scale-x-100 h-3.5 w-3.5 text-muted-foreground/60" />
+            ) : null}
           </span>
         )
       })}

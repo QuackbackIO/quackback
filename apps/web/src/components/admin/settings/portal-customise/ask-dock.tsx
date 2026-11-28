@@ -218,7 +218,7 @@ export const AskDock = memo(function AskDock({
               className="gap-1 px-2 text-muted-foreground"
               onClick={() => setOpen(false)}
             >
-              <ChevronLeftIcon className="size-4" aria-hidden="true" />
+              <ChevronLeftIcon className="rtl:-scale-x-100 size-4" aria-hidden="true" />
               Sections
             </Button>
           </div>
@@ -277,7 +277,7 @@ export const AskDock = memo(function AskDock({
           >
             Show chat
             <span className="tabular-nums">· {messages.length}</span>
-            <ChevronRightIcon className="ms-auto size-4" aria-hidden="true" />
+            <ChevronRightIcon className="rtl:-scale-x-100 ms-auto size-4" aria-hidden="true" />
           </button>
         ) : null}
         <form
@@ -365,7 +365,7 @@ function ChangeReply({
               <LineMark line={line} />
               <span className="min-w-0 flex-1">{line.text}</span>
               <ChevronRightIcon
-                className="size-3.5 shrink-0 text-muted-foreground opacity-0 group-hover/line:opacity-100 group-focus-visible/line:opacity-100"
+                className="rtl:-scale-x-100 size-3.5 shrink-0 text-muted-foreground opacity-0 group-hover/line:opacity-100 group-focus-visible/line:opacity-100"
                 aria-hidden="true"
               />
             </button>

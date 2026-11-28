@@ -47,12 +47,12 @@ export function TabStrip({ tabs, className }: TabStripProps) {
             {Icon && <Icon className="h-3.5 w-3.5" />}
             {tab.label}
             {tab.badge != null && tab.badge > 0 && (
-              <span className="ml-0.5 inline-flex items-center justify-center min-w-5 h-5 px-1 text-xs font-semibold rounded-full bg-primary/15 text-primary">
+              <span className="ms-0.5 inline-flex items-center justify-center min-w-5 h-5 px-1 text-xs font-semibold rounded-full bg-primary/15 text-primary">
                 {formatBadgeCount(tab.badge)}
               </span>
             )}
             {isActive && (
-              <span className="absolute bottom-0 left-3 right-3 h-0.5 bg-foreground rounded-full" />
+              <span className="absolute bottom-0 start-3 end-3 h-0.5 bg-foreground rounded-full" />
             )}
           </Link>
         )

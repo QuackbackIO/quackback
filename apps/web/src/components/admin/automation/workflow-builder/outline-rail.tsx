@@ -29,7 +29,7 @@ export function OutlineRail({
   return (
     <nav
       aria-label="Workflow outline"
-      className="flex w-60 shrink-0 flex-col border-r border-border/50 bg-background"
+      className="flex w-60 shrink-0 flex-col border-e border-border/50 bg-background"
     >
       <div className="flex items-center justify-between px-3 pt-3 pb-2">
         <span className="text-[11px] font-semibold text-muted-foreground">Outline</span>
@@ -54,7 +54,7 @@ export function OutlineRail({
               type="button"
               onClick={() => onSelectNode(entry.id)}
               className={cn(
-                'flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs',
+                'flex w-full items-center gap-2 rounded-md px-2 py-1 text-start text-xs',
                 selection?.kind === 'node' && selection.id === entry.id
                   ? 'bg-primary/10 font-medium text-primary'
                   : 'text-foreground hover:bg-muted/60'

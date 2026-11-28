@@ -124,7 +124,7 @@ export function HelpCenterListItem({
       </div>
 
       <div
-        className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
+        className="absolute end-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
         onClick={(e) => e.stopPropagation()}
       >
         <DropdownMenu>
@@ -135,7 +135,7 @@ export function HelpCenterListItem({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={() => onEdit?.(id)}>
-              <PencilIcon className="mr-2 h-4 w-4" />
+              <PencilIcon className="me-2 h-4 w-4" />
               Edit
             </DropdownMenuItem>
             <DropdownMenuSeparator />
@@ -143,7 +143,7 @@ export function HelpCenterListItem({
               onClick={() => onDelete?.(id)}
               className="text-destructive focus:text-destructive"
             >
-              <TrashIcon className="mr-2 h-4 w-4" />
+              <TrashIcon className="me-2 h-4 w-4" />
               Delete
             </DropdownMenuItem>
           </DropdownMenuContent>

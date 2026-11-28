@@ -54,7 +54,7 @@ export function ArticleFeedbackReasonsDialog({
           </div>
         ) : reasons && reasons.length > 0 ? (
           <ScrollArea className="max-h-[60vh]">
-            <ul className="flex flex-col gap-2 pr-3">
+            <ul className="flex flex-col gap-2 pe-3">
               {reasons.map((entry) => (
                 <li
                   key={entry.id}

@@ -75,7 +75,7 @@ export function UsersBulkSegmentBar({
     <div className="flex items-center gap-2 rounded-lg border border-border/50 bg-muted/30 px-3 py-2">
       <TagIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
       <span className="text-xs font-medium text-foreground">{selectedCount} selected</span>
-      <div className="flex items-center gap-1.5 ml-auto">
+      <div className="flex items-center gap-1.5 ms-auto">
         <SegmentDropdown
           label="Add to segment"
           segments={manualSegments}
@@ -89,7 +89,7 @@ export function UsersBulkSegmentBar({
           disabled={isPending}
         />
         <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={onClear}>
-          <XMarkIcon className="h-3 w-3 mr-1" />
+          <XMarkIcon className="h-3 w-3 me-1" />
           Clear
         </Button>
       </div>

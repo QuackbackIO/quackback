@@ -24,7 +24,7 @@ function UploadedVideoNodeView({ node, selected, deleteNode }: ReactNodeViewProp
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => deleteNode()}
         className={cn(
-          'absolute right-2 top-2 flex size-7 items-center justify-center rounded-full border border-white/30 bg-black/70 text-white shadow-sm transition-opacity hover:bg-black/90',
+          'absolute end-2 top-2 flex size-7 items-center justify-center rounded-full border border-white/30 bg-black/70 text-white shadow-sm transition-opacity hover:bg-black/90',
           'opacity-0 group-hover:opacity-100 focus:opacity-100',
           selected && 'opacity-100'
         )}

@@ -49,7 +49,7 @@ export function SidebarPostRow({ post, linked, onLink, onUnlink }: SidebarPostRo
             <Loader2Icon className="h-3 w-3 animate-spin" />
           ) : (
             <>
-              <UnlinkIcon className="mr-1 h-3 w-3" />
+              <UnlinkIcon className="me-1 h-3 w-3" />
               Unlink
             </>
           )}
@@ -70,7 +70,7 @@ export function SidebarPostRow({ post, linked, onLink, onUnlink }: SidebarPostRo
             <Loader2Icon className="h-3 w-3 animate-spin" />
           ) : (
             <>
-              <LinkIcon className="mr-1 h-3 w-3" />
+              <LinkIcon className="me-1 h-3 w-3" />
               Link
             </>
           )}

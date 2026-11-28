@@ -223,7 +223,7 @@ export function MergeIntoDialog({ postId, postTitle, open, onOpenChange }: Merge
                     type="button"
                     onClick={() => setConfirmTarget(suggestion)}
                     disabled={merge.isPending}
-                    className="w-full text-left flex items-center gap-3 px-4 py-2.5 hover:bg-muted/30 transition-colors"
+                    className="w-full text-start flex items-center gap-3 px-4 py-2.5 hover:bg-muted/30 transition-colors"
                   >
                     {/* Vote count column - matches PostCard style */}
                     <div className="flex flex-col items-center justify-center shrink-0 w-11 py-1.5 rounded-lg border text-muted-foreground bg-muted/40 border-border/50">
@@ -288,7 +288,7 @@ export function MergeIntoDialog({ postId, postTitle, open, onOpenChange }: Merge
                   <span className="truncate flex-1 min-w-0 font-medium text-foreground">
                     {postTitle}
                   </span>
-                  <ArrowRightIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <ArrowRightIcon className="rtl:-scale-x-100 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                   <span className="truncate flex-1 min-w-0 font-medium text-foreground">
                     {confirmTarget?.title}
                   </span>
@@ -557,7 +557,7 @@ function MergeOthersRow({
       type="button"
       onClick={onToggle}
       disabled={disabled}
-      className="w-full text-left flex items-center gap-3 px-4 py-2.5 hover:bg-muted/30 transition-colors"
+      className="w-full text-start flex items-center gap-3 px-4 py-2.5 hover:bg-muted/30 transition-colors"
     >
       <Checkbox checked={selected} className="shrink-0" tabIndex={-1} />
 

@@ -72,13 +72,13 @@ export function NotificationBell({
         )}
       >
         <BellIcon className="h-5 w-5 shrink-0" />
-        {labeled ? <span className="min-w-0 flex-1 truncate text-left">{title}</span> : null}
+        {labeled ? <span className="min-w-0 flex-1 truncate text-start">{title}</span> : null}
         {unreadCount > 0 && (
           <span
             className={cn(
               labeled
                 ? 'ms-auto flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1'
-                : 'absolute -top-0.5 -right-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1',
+                : 'absolute -top-0.5 -end-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1',
               'border-2 border-card bg-primary text-[11px] font-semibold text-primary-foreground',
               shouldPulse && 'animate-pulse'
             )}

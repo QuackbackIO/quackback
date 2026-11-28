@@ -36,7 +36,7 @@ export const CustomiseTopBar = memo(function CustomiseTopBar({
     <div className="flex h-[52px] shrink-0 items-center gap-2 border-b border-border px-3 sm:gap-3">
       <Button variant="ghost" size="sm" asChild className="gap-1 text-muted-foreground">
         <Link to="/admin/settings/portal">
-          <ChevronLeftIcon className="size-4" aria-hidden="true" />
+          <ChevronLeftIcon className="rtl:-scale-x-100 size-4" aria-hidden="true" />
           Portal
         </Link>
       </Button>

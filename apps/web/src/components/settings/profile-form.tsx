@@ -240,7 +240,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
             >
               {isUploadingAvatar ? (
                 <>
-                  <ArrowPathIcon className="h-4 w-4 animate-spin mr-2" />
+                  <ArrowPathIcon className="h-4 w-4 animate-spin me-2" />
                   <FormattedMessage
                     id="portal.settings.profile.avatar.uploading"
                     defaultMessage="Uploading..."
@@ -248,7 +248,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
                 </>
               ) : (
                 <>
-                  <CameraIcon className="h-4 w-4 mr-2" />
+                  <CameraIcon className="h-4 w-4 me-2" />
                   <FormattedMessage
                     id="portal.settings.profile.avatar.change"
                     defaultMessage="Change avatar"
@@ -319,7 +319,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting ? (
                   <>
-                    <ArrowPathIcon className="h-4 w-4 animate-spin mr-2" />
+                    <ArrowPathIcon className="h-4 w-4 animate-spin me-2" />
                     <FormattedMessage
                       id="portal.settings.profile.personal.saving"
                       defaultMessage="Saving..."

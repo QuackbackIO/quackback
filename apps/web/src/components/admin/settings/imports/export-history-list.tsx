@@ -99,7 +99,7 @@ export function ExportHistoryList() {
             <TableHead>Size</TableHead>
             <TableHead>Contents</TableHead>
             <TableHead>Status</TableHead>
-            <TableHead className="text-right">Download</TableHead>
+            <TableHead className="text-end">Download</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -131,7 +131,7 @@ export function ExportHistoryList() {
                   <Badge variant={STATUS_VARIANT[run.status]}>{STATUS_LABEL[run.status]}</Badge>
                 )}
               </TableCell>
-              <TableCell className="text-right">
+              <TableCell className="text-end">
                 {run.status === 'completed' && !isExpired(run) ? (
                   <Button variant="ghost" size="sm" asChild>
                     <a href={`/api/export/runs/${run.id}/download`}>

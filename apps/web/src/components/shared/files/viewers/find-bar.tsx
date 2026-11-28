@@ -80,7 +80,7 @@ export function FindBar({
   }
 
   return (
-    <div className="absolute top-2 right-4 z-10 flex items-center gap-1 rounded-lg border border-border bg-popover py-1 pr-1 pl-2.5 text-xs text-muted-foreground shadow-lg">
+    <div className="absolute top-2 end-4 z-10 flex items-center gap-1 rounded-lg border border-border bg-popover py-1 pe-1 ps-2.5 text-xs text-muted-foreground shadow-lg">
       <input
         ref={inputRef}
         type="search"
@@ -94,7 +94,7 @@ export function FindBar({
         onKeyDown={onKeyDown}
         className="w-40 bg-transparent text-[13px] text-popover-foreground outline-none placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:hidden"
       />
-      <span className="min-w-16 px-1 text-right tabular-nums" aria-live="polite">
+      <span className="min-w-16 px-1 text-end tabular-nums" aria-live="polite">
         {query && !searching
           ? total === 0
             ? intl.formatMessage({ id: 'files.find.noMatches', defaultMessage: 'No matches' })

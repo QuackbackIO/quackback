@@ -39,7 +39,7 @@ function CardContent({ post }: { post: RoadmapViewPost }) {
   const etaLabel = formatMonthYear(post.eta)
   return (
     <>
-      <div className="flex flex-col items-center justify-center w-14 shrink-0 border-r border-border/50 text-muted-foreground">
+      <div className="flex flex-col items-center justify-center w-14 shrink-0 border-e border-border/50 text-muted-foreground">
         <ChevronUpIcon className="h-4 w-4" />
         <span className="text-sm font-semibold text-foreground">{post.voteCount}</span>
       </div>

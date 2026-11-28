@@ -285,7 +285,7 @@ export function HighlightedCode({ code, lang }: HighlightedCodeProps) {
 
   return (
     <pre
-      className="p-3 text-xs font-mono overflow-x-auto whitespace-pre leading-relaxed rounded-br-md h-full"
+      className="p-3 text-xs font-mono overflow-x-auto whitespace-pre leading-relaxed rounded-ee-md h-full"
       style={{ backgroundColor: DARK_PLUS.bg, color: DARK_PLUS.fg }}
     >
       {lines.map((line, lineIdx) => {

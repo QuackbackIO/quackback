@@ -133,12 +133,12 @@ export function PersonalKeysOversight({
           <KeyTable>
             <thead>
               <tr>
-                <KeyTableHead className="pl-4 sm:pl-6">{intl.formatMessage(m.key)}</KeyTableHead>
+                <KeyTableHead className="ps-4 sm:ps-6">{intl.formatMessage(m.key)}</KeyTableHead>
                 <KeyTableHead>{intl.formatMessage(m.teammate)}</KeyTableHead>
                 <KeyTableHead>{intl.formatMessage(m.scopes)}</KeyTableHead>
                 <KeyTableHead>{intl.formatMessage(m.expires)}</KeyTableHead>
                 <KeyTableHead>{intl.formatMessage(m.lastUsed)}</KeyTableHead>
-                <KeyTableHead className="pr-4 sm:pr-6">
+                <KeyTableHead className="pe-4 sm:pe-6">
                   <span className="sr-only">{intl.formatMessage(m.actions)}</span>
                 </KeyTableHead>
               </tr>
@@ -146,7 +146,7 @@ export function PersonalKeysOversight({
             <tbody>
               {apiKeys.map((key) => (
                 <tr key={key.id}>
-                  <KeyTableCell className="pl-4 font-medium sm:pl-6">
+                  <KeyTableCell className="ps-4 font-medium sm:ps-6">
                     <span className="flex items-center gap-2">
                       {key.name}
                       {isKeyExpired(key) && <ExpiredTag label={intl.formatMessage(m.expired)} />}
@@ -166,7 +166,7 @@ export function PersonalKeysOversight({
                       ? formatDistanceToNow(key.lastUsedAt, { addSuffix: true })
                       : intl.formatMessage(m.never)}
                   </KeyTableCell>
-                  <KeyTableCell className="pr-4 text-right sm:pr-6">
+                  <KeyTableCell className="pe-4 text-end sm:pe-6">
                     <Button
                       variant="ghost"
                       size="sm"

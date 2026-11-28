@@ -129,7 +129,7 @@ function CopilotSourceRow({ citation }: { citation: CopilotCitation }) {
       <Icon className={cn('h-3.5 w-3.5 shrink-0', isInternal && 'text-warning')} />
       <span className="truncate">{citation.title}</span>
       {isInternal && <LockClosedIcon className="h-3 w-3 shrink-0 text-warning" />}
-      <span className="pointer-events-none absolute bottom-[calc(100%+6px)] left-0 z-30 w-60 -translate-y-1 rounded-xl border border-border bg-popover p-3 text-left opacity-0 shadow-xl transition-all group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+      <span className="pointer-events-none absolute bottom-[calc(100%+6px)] start-0 z-30 w-60 -translate-y-1 rounded-xl border border-border bg-popover p-3 text-start opacity-0 shadow-xl transition-all group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
         <span className="mb-1 block text-[13px] font-semibold leading-snug text-foreground">
           {citation.title}
         </span>

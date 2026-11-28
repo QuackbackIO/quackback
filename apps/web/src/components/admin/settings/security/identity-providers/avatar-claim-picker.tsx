@@ -228,7 +228,7 @@ export function AvatarClaimPicker({
                     aria-pressed={pressed}
                     onClick={() => onChange(option.path)}
                     className={cn(
-                      'grid min-h-11 w-full grid-cols-[minmax(0,8rem)_1.75rem_minmax(0,1fr)] items-center gap-2.5 px-3 py-1.5 text-left outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-muted-foreground/40 focus-visible:ring-inset',
+                      'grid min-h-11 w-full grid-cols-[minmax(0,8rem)_1.75rem_minmax(0,1fr)] items-center gap-2.5 px-3 py-1.5 text-start outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-muted-foreground/40 focus-visible:ring-inset',
                       pressed && 'bg-muted'
                     )}
                   >

@@ -170,7 +170,7 @@ function ConnectorsPage() {
               )}
               {connector.assignments.agent && <Badge size="sm">Agent</Badge>}
               {connector.assignments.copilot && <Badge size="sm">Copilot</Badge>}
-              <ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground" />
+              <ChevronRightIcon className="rtl:-scale-x-100 size-3.5 shrink-0 text-muted-foreground" />
             </Link>
           ))}
         </SettingsCard>

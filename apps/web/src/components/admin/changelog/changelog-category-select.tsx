@@ -89,7 +89,7 @@ export function ChangelogCategorySelect({ value, onChange }: ChangelogCategorySe
                     className="h-2.5 w-2.5 rounded-full shrink-0"
                     style={{ backgroundColor: category.color }}
                   />
-                  <span className="flex-1 text-left truncate">{category.name}</span>
+                  <span className="flex-1 text-start truncate">{category.name}</span>
                 </button>
               ))
             )}

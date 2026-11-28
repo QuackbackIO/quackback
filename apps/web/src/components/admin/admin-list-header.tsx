@@ -55,7 +55,7 @@ export function AdminListHeader({
           />
         )}
         {filters}
-        {action && <div className="ml-auto flex items-center gap-2">{action}</div>}
+        {action && <div className="ms-auto flex items-center gap-2">{action}</div>}
       </div>
       {children}
     </div>

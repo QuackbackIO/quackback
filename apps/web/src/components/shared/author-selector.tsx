@@ -233,7 +233,7 @@ export function AuthorSelector({
         <button
           type="button"
           className={cn(
-            'w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left',
+            'w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-start',
             'border border-border/50 hover:border-border hover:bg-muted/40',
             'transition-all duration-150 text-[13px]'
           )}
@@ -253,7 +253,7 @@ export function AuthorSelector({
               New
             </Badge>
           )}
-          <ChevronUpDownIcon className="h-3.5 w-3.5 text-muted-foreground/60 ml-auto shrink-0" />
+          <ChevronUpDownIcon className="h-3.5 w-3.5 text-muted-foreground/60 ms-auto shrink-0" />
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-64 p-0" align="start" sideOffset={4}>
@@ -299,7 +299,7 @@ export function AuthorSelector({
                           onChange(member.id)
                           setOpen(false)
                         }}
-                        className="flex items-center gap-2 min-w-0 flex-1 text-left"
+                        className="flex items-center gap-2 min-w-0 flex-1 text-start"
                       >
                         <Avatar
                           className="h-5 w-5 shrink-0"
@@ -349,7 +349,7 @@ export function AuthorSelector({
                 <button
                   type="button"
                   onClick={() => setMode('create')}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-[13px] text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-start text-[13px] text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
                 >
                   <PlusIcon className="size-4" />
                   Create new user
@@ -369,7 +369,7 @@ export function AuthorSelector({
                 }}
                 className="text-muted-foreground hover:text-foreground transition-colors"
               >
-                <ArrowLeftIcon className="h-3.5 w-3.5" />
+                <ArrowLeftIcon className="rtl:-scale-x-100 h-3.5 w-3.5" />
               </button>
               <span className="text-xs font-medium">{formTitle}</span>
             </div>

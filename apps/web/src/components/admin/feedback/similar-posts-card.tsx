@@ -86,7 +86,7 @@ export function SimilarPostsCard({ postId, onNavigateToPost }: SimilarPostsCardP
         <CollapsibleTrigger asChild>
           <button
             type="button"
-            className="flex w-full items-center gap-2 px-4 py-3 text-left hover:bg-muted/10 transition-colors rounded-t-lg"
+            className="flex w-full items-center gap-2 px-4 py-3 text-start hover:bg-muted/10 transition-colors rounded-t-lg"
           >
             <SparklesIcon className="size-3.5 text-warning shrink-0" />
             <p className="text-xs font-medium text-muted-foreground/70">Similar posts</p>
@@ -142,11 +142,11 @@ export function SimilarPostsCard({ postId, onNavigateToPost }: SimilarPostsCardP
                         <TooltipContent side="bottom">Merge</TooltipContent>
                         <DropdownMenuContent align="end" className="w-56">
                           <DropdownMenuItem onClick={() => handleAccept(suggestion.id, isSource)}>
-                            <ArrowDownIcon className="size-4 mr-2" />
+                            <ArrowDownIcon className="size-4 me-2" />
                             Merge into this
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleAccept(suggestion.id, !isSource)}>
-                            <ArrowUpIcon className="size-4 mr-2" />
+                            <ArrowUpIcon className="size-4 me-2" />
                             Merge into that
                           </DropdownMenuItem>
                         </DropdownMenuContent>

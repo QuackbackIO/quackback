@@ -234,7 +234,7 @@ export function GitHubConfig({
                 i > 0 ? 'border-t border-border' : ''
               }`}
             >
-              <div className="pr-4">
+              <div className="pe-4">
                 <p className="text-sm font-medium">{event.label}</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">{event.description}</p>
               </div>
@@ -284,7 +284,7 @@ export function GitHubConfig({
                 <Badge size="sm" variant={inboxBadge.variant}>
                   {inboxBadge.label}
                 </Badge>
-                <ChevronRightIcon className="size-3.5 text-muted-foreground" />
+                <ChevronRightIcon className="rtl:-scale-x-100 size-3.5 text-muted-foreground" />
               </div>
             </Link>
             <div className="border-t border-border px-4 py-4">

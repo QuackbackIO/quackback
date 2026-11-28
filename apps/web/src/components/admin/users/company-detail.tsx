@@ -83,7 +83,7 @@ function FieldRow({ label, children }: { label: string; children: React.ReactNod
   return (
     <div className="flex items-center justify-between gap-3 py-2 border-b border-border/40 last:border-0">
       <span className="text-xs text-muted-foreground shrink-0">{label}</span>
-      <span className="text-sm text-foreground text-right min-w-0 truncate">{children}</span>
+      <span className="text-sm text-foreground text-end min-w-0 truncate">{children}</span>
     </div>
   )
 }
@@ -145,7 +145,7 @@ function AttachMemberButton({ companyId }: { companyId: CompanyId }) {
                 type="button"
                 disabled={busy}
                 onClick={() => attach(person.principalId)}
-                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] hover:bg-muted/60 disabled:opacity-50"
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-start text-[13px] hover:bg-muted/60 disabled:opacity-50"
               >
                 <Avatar
                   src={person.image}
@@ -474,7 +474,7 @@ function CompanyAttributesPanel({
             </div>
           ) : (
             <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={startEditing}>
-              <PencilIcon className="h-3 w-3 mr-1" />
+              <PencilIcon className="h-3 w-3 me-1" />
               Edit
             </Button>
           ))}
@@ -623,7 +623,7 @@ export function CompanyDetail({ companyId, onClose, canManage }: CompanyDetailPr
   const backHeader = (
     <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm px-3 py-2.5">
       <Button variant="ghost" size="sm" onClick={onClose}>
-        <ArrowLeftIcon className="h-4 w-4 mr-1.5" />
+        <ArrowLeftIcon className="rtl:-scale-x-100 h-4 w-4 me-1.5" />
         Back to companies
       </Button>
     </div>
@@ -678,7 +678,7 @@ export function CompanyDetail({ companyId, onClose, canManage }: CompanyDetailPr
           {canManage && !isEditing && (
             <div className="flex shrink-0 items-center gap-1">
               <Button variant="ghost" size="sm" className="h-8 px-2" onClick={startEditing}>
-                <PencilIcon className="h-3.5 w-3.5 mr-1" />
+                <PencilIcon className="h-3.5 w-3.5 me-1" />
                 Edit
               </Button>
               <Button

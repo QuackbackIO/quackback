@@ -269,7 +269,7 @@ export function MembersTab({ currentMember, canManageMembers, initialSearch }: M
                   <p className="font-medium text-foreground truncate">
                     {r.name}
                     {isCurrentUser && (
-                      <span className="ml-2 text-xs text-muted-foreground">(you)</span>
+                      <span className="ms-2 text-xs text-muted-foreground">(you)</span>
                     )}
                   </p>
                   {r.email && <p className="text-sm text-muted-foreground truncate">{r.email}</p>}
@@ -288,7 +288,7 @@ export function MembersTab({ currentMember, canManageMembers, initialSearch }: M
               <div className="min-w-0">
                 <p className="font-medium text-foreground truncate">
                   {r.name || r.email}
-                  <Badge variant="warning" className="ml-2">
+                  <Badge variant="warning" className="ms-2">
                     Invited
                   </Badge>
                 </p>
@@ -403,7 +403,7 @@ export function MembersTab({ currentMember, canManageMembers, initialSearch }: M
           <span className="text-[13px] text-muted-foreground">{seatDescription}</span>
         )}
         {canManageMembers && (
-          <Button size="sm" className="ml-auto" onClick={() => setShowAddPeople(true)}>
+          <Button size="sm" className="ms-auto" onClick={() => setShowAddPeople(true)}>
             <PlusIcon className="h-4 w-4" />
             Add people
           </Button>
@@ -495,10 +495,10 @@ export function MembersTab({ currentMember, canManageMembers, initialSearch }: M
                           <p className="font-medium text-sm truncate">
                             {r.type === 'member' ? r.name : r.name || r.email}
                             {isCurrentUser && (
-                              <span className="ml-2 text-xs text-muted-foreground">(you)</span>
+                              <span className="ms-2 text-xs text-muted-foreground">(you)</span>
                             )}
                             {r.type === 'invitation' && (
-                              <Badge variant="warning" className="ml-2">
+                              <Badge variant="warning" className="ms-2">
                                 Invited
                               </Badge>
                             )}

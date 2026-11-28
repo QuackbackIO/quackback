@@ -433,7 +433,7 @@ function RuleBuilder({
       </div>
 
       <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={handleAdd}>
-        <PlusIcon className="h-3.5 w-3.5 mr-1" />
+        <PlusIcon className="h-3.5 w-3.5 me-1" />
         Add condition
       </Button>
     </div>
@@ -522,7 +522,7 @@ export function SegmentFormDialog({
                   type="button"
                   onClick={() => setType(t)}
                   className={cn(
-                    'flex-1 px-4 py-3 rounded-lg border-2 text-left transition-colors',
+                    'flex-1 px-4 py-3 rounded-lg border-2 text-start transition-colors',
                     type === t
                       ? 'border-primary bg-primary/5'
                       : 'border-border hover:border-border/80'

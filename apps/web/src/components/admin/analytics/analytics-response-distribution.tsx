@@ -25,7 +25,7 @@ export function AnalyticsResponseDistribution({
         const share = Math.round((bucket.count / distribution.total) * 100)
         return (
           <div key={bucket.label} className="flex items-center gap-2 text-xs">
-            <span className="w-14 shrink-0 text-right text-muted-foreground">{bucket.label}</span>
+            <span className="w-14 shrink-0 text-end text-muted-foreground">{bucket.label}</span>
             <div className="h-3 flex-1 overflow-hidden rounded-sm bg-muted/40">
               <div
                 className="h-full rounded-sm bg-primary/70"
@@ -33,8 +33,8 @@ export function AnalyticsResponseDistribution({
                 aria-hidden
               />
             </div>
-            <span className="w-8 shrink-0 text-right font-medium tabular-nums">{bucket.count}</span>
-            <span className="w-9 shrink-0 text-right text-muted-foreground tabular-nums">
+            <span className="w-8 shrink-0 text-end font-medium tabular-nums">{bucket.count}</span>
+            <span className="w-9 shrink-0 text-end text-muted-foreground tabular-nums">
               {share}%
             </span>
           </div>

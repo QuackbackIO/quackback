@@ -399,9 +399,9 @@ export function UsersList({
               <span className={cn(COUNTRY_COLUMN_WIDTH, MENU_LABEL, 'shrink-0')}>Country</span>
             )}
             <div className="flex shrink-0 items-center gap-3">
-              <span className={cn(METRIC_COLUMN_WIDTH, MENU_LABEL, 'text-right')}>Posts</span>
-              <span className={cn(METRIC_COLUMN_WIDTH, MENU_LABEL, 'text-right')}>Comments</span>
-              <span className={cn(METRIC_COLUMN_WIDTH, MENU_LABEL, 'text-right')}>Votes</span>
+              <span className={cn(METRIC_COLUMN_WIDTH, MENU_LABEL, 'text-end')}>Posts</span>
+              <span className={cn(METRIC_COLUMN_WIDTH, MENU_LABEL, 'text-end')}>Comments</span>
+              <span className={cn(METRIC_COLUMN_WIDTH, MENU_LABEL, 'text-end')}>Votes</span>
             </div>
           </div>
           <div className="divide-y divide-border/50">

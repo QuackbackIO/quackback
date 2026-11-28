@@ -237,7 +237,7 @@ function AddFilterButton({
                   onClick={() => setActiveCategory(category.key)}
                   className={cn(
                     'w-full flex items-center justify-between gap-2 px-2.5 py-1.5',
-                    'text-[13px] text-left',
+                    'text-[13px] text-start',
                     'hover:bg-muted/50 transition-colors'
                   )}
                 >
@@ -245,7 +245,7 @@ function AddFilterButton({
                     <Icon className="size-4 text-muted-foreground" />
                     {category.label}
                   </span>
-                  <ChevronRightIcon className="h-3 w-3 text-muted-foreground" />
+                  <ChevronRightIcon className="rtl:-scale-x-100 h-3 w-3 text-muted-foreground" />
                 </button>
               )
             })}
@@ -257,7 +257,7 @@ function AddFilterButton({
               onClick={() => setActiveCategory(null)}
               className="w-full flex items-center gap-1.5 px-2.5 py-1.5 text-[13px] text-muted-foreground hover:text-foreground border-b border-border/50"
             >
-              <ChevronRightIcon className="h-2.5 w-2.5 rotate-180" />
+              <ChevronRightIcon className="rtl:-scale-x-100 h-2.5 w-2.5 rotate-180" />
               Back
             </button>
             <div className="max-h-[250px] overflow-y-auto py-1">

@@ -447,7 +447,7 @@ function MatrixRow({
 
   return (
     <div className={`grid ${MATRIX_GRID_COLS} items-center gap-3 py-3`}>
-      <div className="min-w-0 pr-2">
+      <div className="min-w-0 pe-2">
         <p className="text-sm font-medium">{label}</p>
         {description && <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>}
       </div>
