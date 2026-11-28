@@ -106,12 +106,86 @@ fan-out commit together. Review-mode events resolve current links and show the
 source, remote item, and received status. Missing verified destination data may
 support a review of an existing current link; it never authorizes automatic local
 updates. Automatic updates additionally require destination and revision evidence.
+An optional `parseAssigneeChange` reads the same receipt for an item's assignee
+added or removed: in destinations that switch `assigneeSync` on, `sync/assignees.ts`
+resolves the account through the connection's teammate matches
+(`integration_user_mappings`) and queues one `assignee` operation per linked
+ticket, which assigns as the integration's principal and is superseded by a newer
+change to the same ticket.
 
 Remote content, outbound status changes, and selected archive requests become
 manual reviews. A provider must supply a verified conditional-write contract
 before automatic remote edits can be enabled. Reading and then writing
 unconditionally is insufficient. GitHub and Linear currently support read-only
 `issues.inspect` for verified link-existing recovery.
+
+One opt-in exception extends that rule deliberately. A provider may declare
+`issues.update` with `writeContract: 'guarded'`: it reads the issue, writes
+nothing when the issue changed on the platform since the baseline the link
+records (`remote_state`, `remote_state_at`), and otherwise writes only what
+differs. This is compare-then-write, not an atomic conditional write: a change
+landing between the read and the write is not detected. So it runs only in a
+destination that switches `applyAutomatically` on (off by default; see
+`sync/issue-updates.ts`). The issue-update resolver routes
+`ticket.status_changed`, `ticket.priority_changed`, `ticket.assigned` and
+`ticket.updated` (a new title) to each active link; one `remote-update`
+operation per event and link (`issue-status`, `-priority`, `-assignees`,
+`-title`) reads the ticket when it runs and is superseded by a newer one for
+the same issue. The destination's `pushStatusMappings` give each ticket status
+an issue state, close reason and label (defaults from the status's category
+and stage, `lib/shared/issue-push.ts`); only those status labels and
+`priority:*` are ever removed. A refused write becomes the usual review in
+Sync history, settling it re-baselines the link, and a successful one records
+the issue's state and version on the link. With the option off, or on a
+switched-off or receive-only destination, `sync/status.ts` keeps making status
+review proposals. Changes the integration's own principal made, anything
+applied by integration sync, and tickets paired with an inbox conversation are
+never sent. GitHub implements it in `integrations/github/server/issue-update.ts`.
+
+A provider with `linkedItems` and `issues.create` can also create an issue for a
+ticket on its own: a destination's `ticket.created` / `ticket.assigned` mappings
+(with `ticketTeamIds` / `ticketTypeIds` filters, see `ticket-issues.ts`) queue the
+same create identity a teammate's "Create issue" uses, so a destination gets one
+issue per ticket. Nothing is queued for a change the integration's own principal
+made or a ticket opened before the opt-in, and the worker rechecks the current
+ticket before sending. `issues.formatTicketIssue` renders the issue (GitHub adds
+attachments, a footer, labels and a marker); without it the narrative is sent.
+
+A provider with `issues.comments` mirrors a linked ticket's public replies onto
+its issues, in destinations that switch `postRepliesAsComments` on (see
+`sync/comments.ts`). The ticket-comment resolver routes `ticket.replied`,
+`ticket.reply_updated`, `ticket.reply_deleted` and `ticket.attachment_added` /
+`_removed` to each active ticket link; one `comment` operation per reply and link
+posts the comment, with a hidden marker, and `message_external_links` records it.
+Those comments are Quackback-authored, not remote content: the reply's edits and
+file changes rewrite the comment, and deleting the reply deletes it, without a
+review, as the inbox channel already does for its own comments. A comment already
+deleted on the platform counts as deleted: a rewrite that finds it gone records
+that, and the reply stays. Remote-authored
+comments are never edited, and replies the integration's own principal wrote are
+never sent back.
+
+The other way, a destination's `commentVisibility` (`off` by default, `note` or
+`reply`) brings comments on a linked issue into its tickets (see
+`sync/inbound-comments.ts`). `inbound.parseCommentChange` reads the comment from
+the signed receipt, and the receipt's worker queues one `comment-import`
+(`-update`, `-delete`) operation per linked ticket, which writes, edits or removes
+an internal note or a public reply as the integration's service principal. The
+connection's own comments and any body carrying a `<!-- quackback:` marker are
+skipped (a marker naming one of our replies only restores its record), tickets
+paired with the provider's inbox conversation are left to the channel, and
+`message_external_links` (`inbound`) keeps a redelivery from bringing a comment in
+twice. A ticket's "Sync" action (`ticket-sync.ts`) queues the same operations for
+replies and comments live sync missed since the link was made: there is no bulk
+backfill, since the ledger only moves forward. One of our own comments deleted on
+the platform marks its record deleted (the reply stays, and stops following it).
+
+An issue that names a ticket as its own (`inbound.parseTicketReference`: the
+ticket-issue marker for this connection, or a link to the ticket in Quackback) but
+is linked to no ticket in its destination is never linked on the delivery's
+say-so. It becomes one `relink` item in Sync history (see
+`sync/ticket-recovery.ts`), offering the verified **Link existing** recovery and
+**Cancel**, once per ticket, issue and destination however busy the issue is.
 
 Integration-only resync visits every active link without re-emitting `post.created`
 to unrelated sinks. Canonical rich text is converted with `contentJsonToMarkdown`;

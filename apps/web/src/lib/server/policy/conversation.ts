@@ -20,27 +20,51 @@ export interface ConversationShape {
 }
 
 /**
- * Whether a refused visitor send may say why instead of NotFound: the actor
- * owns the conversation, or is a workspace-wide service principal. This is not
- * a visibility check: a teammate sees a conversation through
- * `assertConversationVisible`, the SQL check that follows their team scope.
+ * What the caller resolved about the actor's relationship to the
+ * conversation beyond ownership: `participant` = a customer the paired
+ * customer ticket was shared with (conversation-participant.service's
+ * `hasParticipantThreadAccess`). Policy stays pure, so the caller looks it up;
+ * omitted, every check behaves as before ticket sharing.
  */
-export function mayExplainVisitorRefusal(actor: Actor, conv: ConversationShape): Decision {
+export interface ConversationAccess {
+  participant: boolean
+}
+
+/**
+ * Whether a refused visitor send may say why instead of NotFound: the actor
+ * owns the conversation, is a customer its paired ticket was shared with, or
+ * is a workspace-wide service principal. This is not a visibility check: a
+ * teammate sees a conversation through `assertConversationVisible`, the SQL
+ * check that follows their team scope.
+ */
+export function mayExplainVisitorRefusal(
+  actor: Actor,
+  conv: ConversationShape,
+  access?: ConversationAccess
+): Decision {
   if (isUnscopedService(actor)) return allowDecision()
   if (actor.principalId && actor.principalId === conv.visitorPrincipalId) return allowDecision()
+  if (actor.principalId && actor.principalType !== 'service' && access?.participant) {
+    return allowDecision()
+  }
   return denyDecision('You do not have access to this conversation')
 }
 
 /**
- * Who may post a visitor-side message. The actor must own the conversation.
+ * Who may post a visitor-side message. The actor must own the conversation,
+ * or be a customer its paired ticket was shared with.
  * A closed conversation can still be replied to — sending reopens it. Service
  * principals (API keys/integrations) can never post as a visitor.
  */
-export function canSendVisitorMessage(actor: Actor, conv: ConversationShape): Decision {
+export function canSendVisitorMessage(
+  actor: Actor,
+  conv: ConversationShape,
+  access?: ConversationAccess
+): Decision {
   if (!actor.principalId) return denyDecision('A session is required to send a message')
   if (actor.principalType === 'service')
     return denyDecision('Service principals cannot send messages')
-  if (actor.principalId !== conv.visitorPrincipalId)
+  if (actor.principalId !== conv.visitorPrincipalId && !access?.participant)
     return denyDecision('You do not have access to this conversation')
   return allowDecision()
 }
@@ -72,14 +96,16 @@ interface AuthoredMessage {
  * Who may delete a message, the way Slack does it: anyone may delete their own
  * agent message while they hold the permission that writes it; a moderator
  * (`conversation.manage`) may delete anyone's; and the visitor who owns a
- * conversation may delete their own visitor-side message in it. System rows
- * are refused by the caller before this check.
+ * conversation, or a customer its ticket was shared with, may delete their own
+ * visitor-side message in it. System rows are refused by the caller before
+ * this check.
  */
 export function canDeleteMessage(
   actor: Actor,
   message: AuthoredMessage,
   // The owning conversation, or null for a ticket-parented message.
-  conversation: ConversationShape | null
+  conversation: ConversationShape | null,
+  access?: ConversationAccess
 ): Decision {
   if (message.senderType === 'system') return denyDecision('System messages cannot be deleted')
   if (can(actor, PERMISSIONS.CONVERSATION_MANAGE)) return allowDecision()
@@ -89,7 +115,7 @@ export function canDeleteMessage(
     actor.principalId &&
     actor.principalType !== 'service' &&
     message.authorPrincipalId === actor.principalId &&
-    conversation.visitorPrincipalId === actor.principalId
+    (conversation.visitorPrincipalId === actor.principalId || access?.participant)
   ) {
     return allowDecision()
   }

@@ -7,12 +7,15 @@ import {
   postExternalLinks,
   sql,
   integrations,
+  integrationDestinations,
   integrationSyncOperations as operations,
   integrationSyncAttempts as attempts,
   integrationSyncActions as actions,
 } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
-import { installationIdentity } from './identity'
+import type { IntegrationDestinationId } from '@quackback/ids'
+import { installationIdentity, syncDestination, syncHash } from './identity'
+import { destinationTarget } from '../destinations'
 import {
   connectionIsDestination,
   readSlackAssistantEnabled,
@@ -40,6 +43,7 @@ import { getIntegration } from '../index'
 import { safeDestinationLabel } from '../destination'
 import { inspectSyncRemote } from './remote'
 import { persistSyncLink } from './hooks'
+import { acknowledgeIssueReview } from './issue-updates'
 import { getBaseUrl } from '@/lib/server/config'
 import { absolutizeMarkdownUrls } from '../post-content'
 
@@ -52,7 +56,7 @@ export function syncActions(
 ): SyncAction[] {
   if (!manage) return []
   const link: SyncAction[] =
-    op.kind === 'create' &&
+    (op.kind === 'create' || (op.kind === 'relink' && op.sourceType === 'ticket')) &&
     ['post', 'ticket'].includes(op.sourceType ?? '') &&
     getIntegration(op.provider ?? '')?.issues?.inspect
       ? ['link_existing']
@@ -62,6 +66,8 @@ export function syncActions(
       ...(op.cancelRequested ? ['reconcile' as const] : ['reconcile' as const, 'cancel' as const]),
       ...link,
     ]
+  // A proposed link (`relink`): link the item after inspecting it, or leave it unlinked.
+  if (op.state === 'conflict' && op.kind === 'relink') return [...link, 'cancel']
   if (op.state === 'conflict') return ['keep_remote', 'cancel', ...link]
   if (op.state === 'failed' || op.state === 'auth_required') return ['retry', 'cancel']
   if (['queued', 'retry_wait', 'running'].includes(op.state) && !op.cancelRequested)
@@ -134,7 +140,13 @@ async function present(op: SyncOperation, actor: Actor): Promise<SyncHistoryItem
 }
 
 export async function listSyncHistory(
-  input: { provider: string; filter: SyncFilter; cursor?: { at: string; id: string } },
+  input: {
+    provider: string
+    filter: SyncFilter
+    cursor?: { at: string; id: string }
+    /** Only syncs with this destination (a repository of a connection serving several). */
+    destinationId?: string
+  },
   actor: Actor
 ) {
   const row = await db.query.integrations.findFirst({
@@ -165,6 +177,23 @@ export async function listSyncHistory(
         : input.filter === 'successful'
           ? eq(operations.state, 'succeeded')
           : undefined
+  // A destination's operations carry the same key its links' scopes hash: the
+  // identity of `{ channelId: <repository> }` on this connection.
+  const destination = input.destinationId
+    ? await db.query.integrationDestinations.findFirst({
+        where: and(
+          eq(integrationDestinations.id, input.destinationId as IntegrationDestinationId),
+          eq(integrationDestinations.integrationId, row.id)
+        ),
+      })
+    : undefined
+  if (input.destinationId && !destination) throw new SyncRequestError('Destination unavailable')
+  const destinationFilter = destination
+    ? eq(
+        operations.destinationKey,
+        syncHash(syncDestination(destinationTarget(destination), config, definition))
+      )
+    : undefined
   const rows = await db
     .select()
     .from(operations)
@@ -174,6 +203,7 @@ export async function listSyncHistory(
         eq(operations.integrationId, row.id),
         eq(operations.installation, installationIdentity(row)),
         stateFilter,
+        destinationFilter,
         sql`(${operations.createdAt} > now() - interval '90 days' OR ${operations.state} IN ('queued','running','retry_wait','failed','auth_required','uncertain','conflict'))`,
         input.cursor
           ? sql`(${operations.createdAt}, ${operations.id}) < (${input.cursor.at}::timestamptz, ${input.cursor.id}::uuid)`
@@ -232,6 +262,8 @@ export async function inspectSyncOperation(id: string, actor: Actor) {
       }
     if (typeof payload.data.proposedStatus === 'string')
       preview = { title: 'Proposed status', content: payload.data.proposedStatus }
+    if (typeof payload.data.proposedChange === 'string')
+      preview = { title: 'Proposed change', content: payload.data.proposedChange }
     const inbound = payload.data.result as { externalStatus?: unknown } | undefined
     if (op.direction === 'inbound' && typeof inbound?.externalStatus === 'string')
       preview = { title: 'Platform status', content: inbound.externalStatus }
@@ -365,6 +397,8 @@ export async function actOnSync(
         })
         .where(eq(operations.id, current.id))
     } else if (input.action === 'cancel' || input.action === 'keep_remote') {
+      // A settled issue-update review: automatic updates resume from the issue as it is.
+      await acknowledgeIssueReview(tx, current)
       await tx
         .update(operations)
         .set({

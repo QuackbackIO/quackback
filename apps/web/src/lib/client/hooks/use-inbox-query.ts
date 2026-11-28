@@ -82,6 +82,7 @@ function toInboxListInput(filters: InboxFilters) {
     updatedBefore: filters.updatedBefore,
     showDeleted: filters.showDeleted,
     hasDuplicates: filters.hasDuplicates,
+    following: filters.following || undefined,
   }
 }
 
