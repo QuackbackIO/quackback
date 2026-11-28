@@ -1,3 +1,4 @@
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { Node, nodePasteRule } from '@tiptap/core'
 import { ReactNodeViewRenderer, NodeViewWrapper, type ReactNodeViewProps } from '@tiptap/react'
 import { XMarkIcon } from '@heroicons/react/24/solid'
@@ -24,6 +25,7 @@ export interface QuackbackEmbedOptions {
  * non-editable; an empty node simply renders nothing inside it.
  */
 function QuackbackEmbedNodeView({ node, selected, deleteNode }: ReactNodeViewProps) {
+  const intl = useOptionalIntl()
   const kind = node.attrs.kind as 'post' | 'changelog' | 'article' | 'ticket' | null
   const id = node.attrs.id as string | null
   return (
@@ -40,7 +42,7 @@ function QuackbackEmbedNodeView({ node, selected, deleteNode }: ReactNodeViewPro
           editor selection before the click fires. */}
       <button
         type="button"
-        aria-label="Remove embed"
+        aria-label={intl.formatMessage({ id: 'ui.embed.remove', defaultMessage: 'Remove embed' })}
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => deleteNode()}
         className={cn(

@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { SettingsPage } from '@/components/admin/settings/settings-page'
 import { NotificationMatrixForm } from '@/components/settings/notification-matrix-form'
 import { AreaMessages } from '@/components/shared/area-messages'
-import { DEFAULT_LOCALE, loadAreaMessages } from '@/lib/shared/i18n'
+import { DEFAULT_LOCALE, seedAreaMessages } from '@/lib/shared/i18n'
 import { adminPageHead } from '@/lib/client/admin-head'
 
 export const Route = createFileRoute('/admin/settings/notifications')({
@@ -13,13 +13,13 @@ export const Route = createFileRoute('/admin/settings/notifications')({
   // The viewer's preferences load with the page so the matrix is in the
   // document; on a miss the form fetches them itself.
   // The matrix's strings stay out of the catalog every admin page seeds; this
-  // page reads them with the page. It reads the English ones: the portal shares
-  // the matrix, but admin settings render in English.
-  loader: async () => {
+  // page reads them with the page, in the teammate's language (none in English,
+  // which renders from the code).
+  loader: async ({ context }) => {
     const { getNotificationPreferencesFn } = await import('@/lib/server/functions/user')
     const [preferences, messages] = await Promise.all([
       getNotificationPreferencesFn().catch(() => null),
-      loadAreaMessages(DEFAULT_LOCALE, 'notificationPreferences'),
+      seedAreaMessages(context.personLocale ?? DEFAULT_LOCALE, 'notificationPreferences'),
     ])
     return { preferences, messages }
   },

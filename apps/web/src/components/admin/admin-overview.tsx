@@ -35,6 +35,23 @@ export function useWorkspaceHomeTitle(): string {
 
 type Filter = OverviewAttentionKind | 'all'
 
+const HOME_TITLE = { id: 'admin.overview.title', defaultMessage: 'Home' }
+const TRY_AGAIN = { id: 'admin.overview.tryAgain', defaultMessage: 'Try again' }
+/** A section the server could not load (`OverviewSectionState.error`). */
+const SECTION_ERROR = {
+  id: 'admin.overview.sectionError',
+  defaultMessage: 'Couldn’t load this section.',
+}
+const FILTER_LABELS = {
+  all: { id: 'admin.overview.filter.all', defaultMessage: 'All' },
+  support: { id: 'admin.overview.filter.support', defaultMessage: 'Support' },
+  feedback: { id: 'admin.overview.filter.feedback', defaultMessage: 'Feedback' },
+} satisfies Record<Filter, MessageDescriptor>
+const MODULE_TITLES = {
+  changelog: { id: 'admin.overview.module.changelog', defaultMessage: 'Changelog' },
+  helpCenter: { id: 'admin.overview.module.helpCenter', defaultMessage: 'Help center' },
+} satisfies Record<string, MessageDescriptor>
+
 /**
  * One work list, then a card per module on the rail. Counts and the feed are
  * workspace-wide; the viewer's own items are sorted first server-side.
@@ -54,6 +71,7 @@ export function OverviewDashboard({
    */
   emptyStates?: boolean
 }) {
+  const intl = useIntl()
   const overview = useQuery(adminOverviewQueries.get())
   const [filter, setFilter] = useState<Filter>('all')
   const data = overview.data
@@ -65,24 +83,31 @@ export function OverviewDashboard({
   }, [data?.attention, filter])
 
   const filters = useMemo(() => {
-    const kinds: Array<{ id: Filter; label: string }> = [{ id: 'all', label: 'All' }]
-    if (data?.sections.support.enabled) kinds.push({ id: 'support', label: 'Support' })
-    if (data?.sections.feedback.enabled) kinds.push({ id: 'feedback', label: 'Feedback' })
+    const kinds: Array<{ id: Filter; label: MessageDescriptor }> = [
+      { id: 'all', label: FILTER_LABELS.all },
+    ]
+    if (data?.sections.support.enabled) kinds.push({ id: 'support', label: FILTER_LABELS.support })
+    if (data?.sections.feedback.enabled) {
+      kinds.push({ id: 'feedback', label: FILTER_LABELS.feedback })
+    }
     return kinds
   }, [data?.sections])
 
   const momentum = data?.momentum ?? []
   const changelog = data?.changelog ?? []
   const helpCenter = data?.helpCenter ?? []
-  const changelogError = data?.sections.changelog.error ?? null
-  const helpError = data?.sections.helpCenter.error ?? null
+  const changelogError = Boolean(data?.sections.changelog.error)
+  const helpError = Boolean(data?.sections.helpCenter.error)
   const hasAside =
     momentum.length > 0 ||
     changelog.length > 0 ||
     helpCenter.length > 0 ||
-    Boolean(changelogError) ||
-    Boolean(helpError)
-  const feedError = data?.sections.support.error || data?.sections.feedback.error || null
+    changelogError ||
+    helpError
+  const feedError =
+    data?.sections.support.error || data?.sections.feedback.error ? (
+      <FormattedMessage {...SECTION_ERROR} />
+    ) : null
 
   return (
     <div className="min-w-0 space-y-6">
@@ -92,7 +117,7 @@ export function OverviewDashboard({
           {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
         </div>
       ) : (
-        <PageHeader title="Home" actions={actions} />
+        <PageHeader title={intl.formatMessage(HOME_TITLE)} actions={actions} />
       )}
 
       {banner}
@@ -100,8 +125,13 @@ export function OverviewDashboard({
       {overview.isError ? (
         <SettingsCard flush>
           <Quiet>
-            Couldn’t load this page.{' '}
-            <RetryButton onClick={() => void overview.refetch()}>Try again</RetryButton>
+            <FormattedMessage
+              id="admin.overview.loadError"
+              defaultMessage="Couldn’t load this page."
+            />{' '}
+            <RetryButton onClick={() => void overview.refetch()}>
+              <FormattedMessage {...TRY_AGAIN} />
+            </RetryButton>
           </Quiet>
         </SettingsCard>
       ) : data?.hasRealData === false ? (
@@ -135,7 +165,7 @@ export function OverviewDashboard({
                   <TabsList className="h-9">
                     {filters.map((item) => (
                       <TabsTrigger key={item.id} value={item.id} className="pb-2">
-                        {item.label}
+                        {intl.formatMessage(item.label)}
                       </TabsTrigger>
                     ))}
                   </TabsList>
@@ -149,7 +179,9 @@ export function OverviewDashboard({
                   {feedError && attention.length > 0 ? (
                     <p className="border-b border-border px-3 py-2.5 text-sm text-muted-foreground sm:px-4">
                       {feedError}{' '}
-                      <RetryButton onClick={() => void overview.refetch()}>Try again</RetryButton>
+                      <RetryButton onClick={() => void overview.refetch()}>
+                        <FormattedMessage {...TRY_AGAIN} />
+                      </RetryButton>
                     </p>
                   ) : null}
                   {attention.length > 0 ? (
@@ -161,10 +193,17 @@ export function OverviewDashboard({
                   ) : feedError ? (
                     <Quiet>
                       {feedError}{' '}
-                      <RetryButton onClick={() => void overview.refetch()}>Try again</RetryButton>
+                      <RetryButton onClick={() => void overview.refetch()}>
+                        <FormattedMessage {...TRY_AGAIN} />
+                      </RetryButton>
                     </Quiet>
                   ) : (
-                    <Quiet>Nothing to review</Quiet>
+                    <Quiet>
+                      <FormattedMessage
+                        id="admin.overview.nothingToReview"
+                        defaultMessage="Nothing to review"
+                      />
+                    </Quiet>
                   )}
                 </>
               )}
@@ -174,11 +213,11 @@ export function OverviewDashboard({
               <Skeleton className="hidden h-40 rounded-xl lg:block" />
             ) : hasAside ? (
               <aside className="min-w-0 space-y-6">
-                <ModuleCard title="Feedback" items={momentum}>
+                <ModuleCard title={intl.formatMessage(FILTER_LABELS.feedback)} items={momentum}>
                   {(item) => <MomentumRow key={item.postId} item={item} />}
                 </ModuleCard>
                 <ModuleCard
-                  title="Changelog"
+                  title={intl.formatMessage(MODULE_TITLES.changelog)}
                   items={changelog}
                   error={changelogError}
                   onRetry={() => void overview.refetch()}
@@ -186,7 +225,7 @@ export function OverviewDashboard({
                   {(item) => <DeskRow key={item.id} item={item} />}
                 </ModuleCard>
                 <ModuleCard
-                  title="Help center"
+                  title={intl.formatMessage(MODULE_TITLES.helpCenter)}
                   items={helpCenter}
                   error={helpError}
                   onRetry={() => void overview.refetch()}
@@ -439,7 +478,8 @@ function ModuleCard<T>({
 }: {
   title: string
   items: T[]
-  error?: string | null
+  /** The section failed to load on the server. */
+  error?: boolean
   onRetry?: () => void
   children: (item: T) => ReactNode
 }) {
@@ -447,7 +487,12 @@ function ModuleCard<T>({
     return (
       <SettingsCard title={title} flush>
         <Quiet>
-          {error} {onRetry ? <RetryButton onClick={onRetry}>Try again</RetryButton> : null}
+          <FormattedMessage {...SECTION_ERROR} />{' '}
+          {onRetry ? (
+            <RetryButton onClick={onRetry}>
+              <FormattedMessage {...TRY_AGAIN} />
+            </RetryButton>
+          ) : null}
         </Quiet>
       </SettingsCard>
     )

@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, type ReactNode } from 'react'
-import { useIntl } from 'react-intl'
+import { FormattedMessage, useIntl } from 'react-intl'
 import { Link } from '@tanstack/react-router'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader, type PageCrumb } from '@/components/shared/page-header'
@@ -90,7 +90,12 @@ export function SettingsPage({
     <div data-settings-page-body="" className={cn('space-y-6', WIDTH_CLASS[width])}>
       {backLink && !hasBackCrumb && (
         <div className="lg:hidden">
-          <BackLink to="/admin/settings">Settings</BackLink>
+          <BackLink to="/admin/settings">
+            <FormattedMessage
+              id="admin.shell.settingsPage.backToSettings"
+              defaultMessage="Settings"
+            />
+          </BackLink>
         </div>
       )}
       <PageHeader

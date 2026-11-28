@@ -1,3 +1,4 @@
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { useState, useEffect } from 'react'
 import { XMarkIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/solid'
 import type { LatestVersionResult } from '@/lib/server/functions/version'
@@ -43,6 +44,7 @@ export function UpdateBanner({ latestVersion, dismissedVersion }: UpdateBannerPr
   const isDismissed = Boolean(
     latestVersion && dismissedVersion && dismissedVersion === latestVersion.version
   )
+  const intl = useOptionalIntl()
   const [open, setOpen] = useState(() => Boolean(latestVersion) && !isDismissed)
 
   useEffect(() => {
@@ -76,7 +78,13 @@ export function UpdateBanner({ latestVersion, dismissedVersion }: UpdateBannerPr
         <div className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm bg-primary/5 border-b border-primary/10">
           <div className="flex items-center gap-2 min-w-0">
             <span className="font-medium text-foreground shrink-0">
-              Quackback v{latestVersion.version} is available
+              {intl.formatMessage(
+                {
+                  id: 'admin.shell.updateBanner.available',
+                  defaultMessage: 'Quackback v{version} is available',
+                },
+                { version: latestVersion.version }
+              )}
             </span>
             <span className="text-muted-foreground hidden sm:inline">-</span>
             <div className="hidden sm:flex items-center gap-2 text-muted-foreground">
@@ -86,7 +94,10 @@ export function UpdateBanner({ latestVersion, dismissedVersion }: UpdateBannerPr
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-primary hover:underline"
               >
-                See what's new
+                {intl.formatMessage({
+                  id: 'admin.shell.updateBanner.whatsNew',
+                  defaultMessage: "See what's new",
+                })}
                 <NewTabHint />
                 <ArrowTopRightOnSquareIcon className="h-3 w-3" />
               </a>
@@ -97,7 +108,10 @@ export function UpdateBanner({ latestVersion, dismissedVersion }: UpdateBannerPr
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 hover:underline"
               >
-                Release notes
+                {intl.formatMessage({
+                  id: 'admin.shell.updateBanner.releaseNotes',
+                  defaultMessage: 'Release notes',
+                })}
                 <NewTabHint />
                 <ArrowTopRightOnSquareIcon className="h-3 w-3" />
               </a>
@@ -106,7 +120,10 @@ export function UpdateBanner({ latestVersion, dismissedVersion }: UpdateBannerPr
           <button
             onClick={handleDismiss}
             className="shrink-0 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
-            aria-label="Dismiss update notification"
+            aria-label={intl.formatMessage({
+              id: 'admin.shell.updateBanner.dismiss',
+              defaultMessage: 'Dismiss update notification',
+            })}
           >
             <XMarkIcon className="h-4 w-4" />
           </button>

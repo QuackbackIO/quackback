@@ -369,7 +369,10 @@ export function BlockCsatRow({
                 type="button"
                 disabled={submitting || phase === 'sending'}
                 onClick={() => rate(i + 1)}
-                aria-label={`${i + 1} of 5`}
+                aria-label={intl.formatMessage(
+                  { id: 'widget.messenger.csat.faceAria', defaultMessage: '{n} of 5' },
+                  { n: i + 1 }
+                )}
                 className="text-lg leading-none transition-transform hover:scale-110 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {face}

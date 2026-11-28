@@ -1,3 +1,4 @@
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { railControlClass } from '@/components/admin/rail-item'
 import { ArrowsRightLeftIcon } from '@heroicons/react/24/solid'
 import {
@@ -33,6 +34,7 @@ export function WorkspaceSwitcher({
   onOpen: (instanceId: string) => void
   defaultOpen?: boolean
 }) {
+  const intl = useOptionalIntl()
   if (siblings.length === 0) return null
 
   return (
@@ -40,11 +42,21 @@ export function WorkspaceSwitcher({
       <DropdownMenuTrigger asChild>
         <button type="button" data-admin-rail-item="" className={railControlClass()}>
           <ArrowsRightLeftIcon className="size-5 shrink-0" />
-          <span className="min-w-0 flex-1 truncate text-start">Switch workspace</span>
+          <span className="min-w-0 flex-1 truncate text-start">
+            {intl.formatMessage({
+              id: 'admin.shell.workspaceSwitcher.switch',
+              defaultMessage: 'Switch workspace',
+            })}
+          </span>
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" side="right" sideOffset={8} className="w-56">
-        <DropdownMenuLabel className={MENU_LABEL}>Workspaces</DropdownMenuLabel>
+        <DropdownMenuLabel className={MENU_LABEL}>
+          {intl.formatMessage({
+            id: 'admin.shell.workspaceSwitcher.label',
+            defaultMessage: 'Workspaces',
+          })}
+        </DropdownMenuLabel>
         {siblings.map((sibling) => {
           const address = friendlySiblingAddress(sibling.url)
           return (

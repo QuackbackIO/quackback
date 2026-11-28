@@ -1,3 +1,4 @@
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { useState, useEffect } from 'react'
 import { ArrowPathIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
@@ -99,6 +100,7 @@ export function ColorHexInput({
   color: string
   onColorChange: (color: string) => void
 }) {
+  const intl = useOptionalIntl()
   const [hexInput, setHexInput] = useState(color)
 
   // Sync when color changes externally (preset click).
@@ -135,7 +137,10 @@ export function ColorHexInput({
           setHexInput(c)
           onColorChange(c)
         }}
-        title="Random color"
+        title={intl.formatMessage({
+          id: 'admin.shell.colorPicker.random',
+          defaultMessage: 'Random color',
+        })}
       >
         <ArrowPathIcon className="h-3.5 w-3.5" />
       </Button>

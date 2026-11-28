@@ -20,9 +20,14 @@ interface FriendlyShellProps {
   fullPage?: boolean
 }
 
-type Copy = (message: MessageDescriptor & { defaultMessage: string }) => string
+type Copy = (
+  message: MessageDescriptor & { defaultMessage: string },
+  values?: Record<string, string>
+) => string
 
-const english: Copy = (message) => message.defaultMessage
+/** The English with each `{name}` filled in (these messages have no plurals). */
+const english: Copy = (message, values = {}) =>
+  message.defaultMessage.replace(/\{(\w+)\}/g, (match, name: string) => values[name] ?? match)
 
 // Error pages render under every route, so the module that loads their strings
 // is fetched when one shows rather than shipped in the chunk every page loads
@@ -40,7 +45,7 @@ const AreaMessages = lazy(() =>
  * error pages can also render above every IntlProvider; with none mounted they
  * stay English rather than throwing the way `useIntl` would.
  */
-function ErrorPageCopy({ children }: { children: (copy: Copy) => React.ReactNode }) {
+export function ErrorPageCopy({ children }: { children: (copy: Copy) => React.ReactNode }) {
   const intl = useContext(IntlContext)
   const documentLocale = useContext(DocumentLocaleContext)
   if (!intl || documentLocale === DEFAULT_LOCALE) return children(english)
@@ -63,7 +68,7 @@ function ErrorPageCopy({ children }: { children: (copy: Copy) => React.ReactNode
 
 function PageLanguage({ children }: { children: (copy: Copy) => React.ReactNode }) {
   const intl = useIntl()
-  return children((message) => intl.formatMessage(message))
+  return children((message, values) => intl.formatMessage(message, values))
 }
 
 export function FriendlyShell({ children, fullPage = true }: FriendlyShellProps) {
@@ -133,28 +138,54 @@ export function PermissionDeniedPage({ fullPage = true }: { fullPage?: boolean }
 
   return (
     <FriendlyShell fullPage={fullPage}>
-      <h1 className="text-2xl font-semibold tracking-tight">You don&apos;t have access</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Only people with the right permissions can open this page. Ask a workspace admin if you need
-        access.
-      </p>
-
-      <div className="mt-6 flex items-center justify-center gap-3">
-        {isAdminArea ? (
+      <ErrorPageCopy>
+        {(copy) => (
           <>
-            <Button asChild>
-              <a href="/admin">Back to Home</a>
-            </Button>
-            <Button variant="outline" asChild>
-              <a href="/">View public board</a>
-            </Button>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              {copy({
+                id: 'common.errorPage.denied.title',
+                defaultMessage: "You don't have access",
+              })}
+            </h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {copy({
+                id: 'common.errorPage.denied.description',
+                defaultMessage:
+                  'Only people with the right permissions can open this page. Ask a workspace admin if you need access.',
+              })}
+            </p>
+
+            <div className="mt-6 flex items-center justify-center gap-3">
+              {isAdminArea ? (
+                <>
+                  <Button asChild>
+                    <a href="/admin">
+                      {copy({
+                        id: 'common.errorPage.denied.backHome',
+                        defaultMessage: 'Back to Home',
+                      })}
+                    </a>
+                  </Button>
+                  <Button variant="outline" asChild>
+                    <a href="/">
+                      {copy({
+                        id: 'common.errorPage.denied.viewBoard',
+                        defaultMessage: 'View public board',
+                      })}
+                    </a>
+                  </Button>
+                </>
+              ) : (
+                <Button variant="outline" asChild>
+                  <a href="/">
+                    {copy({ id: 'common.errorPage.goHome', defaultMessage: 'Go home' })}
+                  </a>
+                </Button>
+              )}
+            </div>
           </>
-        ) : (
-          <Button variant="outline" asChild>
-            <a href="/">Go home</a>
-          </Button>
         )}
-      </div>
+      </ErrorPageCopy>
     </FriendlyShell>
   )
 }
@@ -183,18 +214,32 @@ export function EntitlementRequiredPage({
     <FriendlyShell fullPage={fullPage}>
       <h1 className="text-2xl font-semibold tracking-tight">{refusal.headline}</h1>
       <p className="mt-2 text-sm text-muted-foreground">{normalized.message}</p>
-      <div className="mt-6 flex items-center justify-center gap-3">
-        {isAdminArea ? (
-          <Button asChild>
-            <a href="/admin/settings/billing">
-              {refusal.requiredPlanName ? `Upgrade to ${refusal.requiredPlanName}` : 'See plans'}
-            </a>
-          </Button>
-        ) : null}
-        <Button variant="outline" asChild>
-          <a href={isAdminArea ? '/admin/settings' : '/'}>Go back</a>
-        </Button>
-      </div>
+      <ErrorPageCopy>
+        {(copy) => (
+          <div className="mt-6 flex items-center justify-center gap-3">
+            {isAdminArea ? (
+              <Button asChild>
+                <a href="/admin/settings/billing">
+                  {refusal.requiredPlanName
+                    ? copy(
+                        {
+                          id: 'common.errorPage.plan.upgradeTo',
+                          defaultMessage: 'Upgrade to {plan}',
+                        },
+                        { plan: refusal.requiredPlanName }
+                      )
+                    : copy({ id: 'common.errorPage.plan.seePlans', defaultMessage: 'See plans' })}
+                </a>
+              </Button>
+            ) : null}
+            <Button variant="outline" asChild>
+              <a href={isAdminArea ? '/admin/settings' : '/'}>
+                {copy({ id: 'common.errorPage.plan.goBack', defaultMessage: 'Go back' })}
+              </a>
+            </Button>
+          </div>
+        )}
+      </ErrorPageCopy>
     </FriendlyShell>
   )
 }

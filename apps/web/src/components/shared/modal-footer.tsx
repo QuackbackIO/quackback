@@ -1,3 +1,4 @@
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { KeyboardHint } from '@/components/shared/keyboard-hint'
 import { Button } from '@/components/ui/button'
 
@@ -26,6 +27,7 @@ export function ModalFooter({
   onSubmit,
   submitDisabled,
 }: ModalFooterProps) {
+  const intl = useOptionalIntl()
   // A long submit label ("Post update & reopen as Investigating") must never
   // be clipped on a narrow screen: the actions wrap onto another line, and a
   // label wider than the whole footer wraps inside its button.
@@ -35,7 +37,7 @@ export function ModalFooter({
       <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 ms-auto">
         {children}
         <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={isPending}>
-          Cancel
+          {intl.formatMessage({ id: 'common.cancel', defaultMessage: 'Cancel' })}
         </Button>
         <Button
           type={submitType}

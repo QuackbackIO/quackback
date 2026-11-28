@@ -1,5 +1,6 @@
 'use client'
 
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import * as React from 'react'
 import { isSameDay, startOfDay } from 'date-fns'
 import { CalendarIcon, ClockIcon, XMarkIcon } from '@heroicons/react/24/outline'
@@ -79,9 +80,15 @@ export function DateTimePicker({
   onClear,
   className,
 }: DateTimePickerProps) {
+  const intl = useOptionalIntl()
   const [open, setOpen] = React.useState(false)
 
-  const defaultPlaceholder = dateOnly ? 'Pick a date' : 'Pick date & time'
+  const defaultPlaceholder = dateOnly
+    ? intl.formatMessage({ id: 'ui.dateTimePicker.pickDate', defaultMessage: 'Pick a date' })
+    : intl.formatMessage({
+        id: 'ui.dateTimePicker.pickDateTime',
+        defaultMessage: 'Pick date & time',
+      })
   const resolvedPlaceholder = placeholder ?? defaultPlaceholder
 
   const applyBounds = React.useCallback(
@@ -174,7 +181,10 @@ export function DateTimePicker({
               onClear()
             }}
             className="inline-flex shrink-0 items-center justify-center border-s border-border/50 px-1.5 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
-            aria-label="Clear date"
+            aria-label={intl.formatMessage({
+              id: 'ui.dateTimePicker.clear',
+              defaultMessage: 'Clear date',
+            })}
           >
             <XMarkIcon className="h-3 w-3" />
           </button>
@@ -206,7 +216,9 @@ export function DateTimePicker({
           <div className="border-t border-border/50 px-3 py-2">
             <div className="flex items-center gap-2">
               <ClockIcon className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Time</span>
+              <span className="text-sm text-muted-foreground">
+                {intl.formatMessage({ id: 'ui.dateTimePicker.time', defaultMessage: 'Time' })}
+              </span>
               <Input
                 type="time"
                 step="60"

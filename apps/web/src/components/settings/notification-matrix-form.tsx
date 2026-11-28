@@ -345,11 +345,20 @@ export function NotificationMatrixForm({
         />
         {showTips ? (
           <SettingRow
-            label="Setup tips"
-            description="Emails with the next step while you set up this workspace."
+            label={intl.formatMessage({
+              id: 'portal.settings.notifications.setupTips.label',
+              defaultMessage: 'Setup tips',
+            })}
+            description={intl.formatMessage({
+              id: 'portal.settings.notifications.setupTips.description',
+              defaultMessage: 'Emails with the next step while you set up this workspace.',
+            })}
             control={
               <Switch
-                aria-label="Setup tips by email"
+                aria-label={intl.formatMessage({
+                  id: 'portal.settings.notifications.setupTips.ariaLabel',
+                  defaultMessage: 'Setup tips by email',
+                })}
                 checked={!tipsOff}
                 onCheckedChange={(checked) => setCell(ONBOARDING_TIPS_KEY, 'email', checked)}
                 disabled={busy}

@@ -2,16 +2,53 @@
 
 import * as React from 'react'
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
+import { IntlContext, type MessageDescriptor } from 'react-intl'
 import { DayFlag, DayPicker, SelectionState, UI } from 'react-day-picker'
 
 import { cn } from '@/lib/shared/utils'
 import { buttonVariants } from '@/components/ui/button'
+import { usePageLocale } from '@/components/ui/local-date'
 
 export type CalendarProps = React.ComponentProps<typeof DayPicker>
 
+const LABELS = {
+  previous: { id: 'ui.calendar.previousMonth', defaultMessage: 'Go to the previous month' },
+  next: { id: 'ui.calendar.nextMonth', defaultMessage: 'Go to the next month' },
+} satisfies Record<string, MessageDescriptor & { defaultMessage: string }>
+
+/**
+ * Month and weekday names, and the day and button labels screen readers
+ * announce, in the page's language. The picker's own defaults are English;
+ * outside an IntlProvider the button labels stay English.
+ */
+function useCalendarLanguage(): Pick<CalendarProps, 'formatters' | 'labels'> {
+  const locale = usePageLocale()
+  const intl = React.useContext(IntlContext)
+  return React.useMemo(() => {
+    const caption = new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' })
+    const weekday = new Intl.DateTimeFormat(locale, { weekday: 'short' })
+    const day = new Intl.DateTimeFormat(locale, { dateStyle: 'full' })
+    const label = (message: (typeof LABELS)[keyof typeof LABELS]) =>
+      intl ? intl.formatMessage(message) : message.defaultMessage
+    return {
+      formatters: {
+        formatCaption: (month) => caption.format(month),
+        formatWeekdayName: (date) => weekday.format(date),
+      },
+      labels: {
+        labelPrevious: () => label(LABELS.previous),
+        labelNext: () => label(LABELS.next),
+        labelDayButton: (date) => day.format(date),
+      },
+    }
+  }, [locale, intl])
+}
+
 function Calendar({ className, classNames, showOutsideDays = true, ...props }: CalendarProps) {
+  const language = useCalendarLanguage()
   return (
     <DayPicker
+      {...language}
       showOutsideDays={showOutsideDays}
       className={cn('p-2', className)}
       classNames={{

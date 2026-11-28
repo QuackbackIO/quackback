@@ -340,7 +340,7 @@ describe('OverviewDashboard', () => {
       ],
       sections: {
         ...state.data.sections,
-        changelog: { enabled: true, error: 'Couldn’t load this section.' },
+        changelog: { enabled: true, error: 'load_failed' },
         helpCenter: { enabled: true, error: null },
       },
     }
@@ -374,7 +374,7 @@ describe('OverviewDashboard', () => {
       helpCenter: [],
       sections: {
         support: { enabled: true, error: null },
-        feedback: { enabled: true, error: 'Couldn’t load this section.' },
+        feedback: { enabled: true, error: 'load_failed' },
         changelog: { enabled: true, error: null },
         helpCenter: { enabled: true, error: null },
         status: { enabled: false, error: null },

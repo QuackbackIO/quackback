@@ -1,3 +1,4 @@
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import * as React from 'react'
 import { Select as SelectPrimitive } from '@base-ui/react/select'
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon, XMarkIcon } from '@heroicons/react/24/solid'
@@ -216,6 +217,7 @@ function SelectTrigger({
   size?: 'xs' | 'sm' | 'default'
   onClear?: () => void
 }) {
+  const intl = useOptionalIntl()
   return (
     <SelectPrimitive.Trigger
       data-slot="select-trigger"
@@ -230,7 +232,7 @@ function SelectTrigger({
       {onClear ? (
         <span
           role="button"
-          aria-label="Clear"
+          aria-label={intl.formatMessage({ id: 'ui.select.clear', defaultMessage: 'Clear' })}
           tabIndex={0}
           className="pointer-events-auto opacity-40 hover:opacity-100 transition-opacity"
           onPointerDown={(e) => e.stopPropagation()}

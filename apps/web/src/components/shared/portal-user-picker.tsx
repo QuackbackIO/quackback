@@ -1,3 +1,4 @@
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
@@ -43,6 +44,7 @@ export function PortalUserPicker({
   autoFocus = false,
   placeholder = 'Search users by name or email…',
 }: PortalUserPickerProps) {
+  const intl = useOptionalIntl()
   const [search, setSearch] = useState('')
   const debounced = useDebouncedValue(search.trim(), 350)
   const showResults = !searchRequired || debounced.length > 0
@@ -63,9 +65,19 @@ export function PortalUserPicker({
       {showResults && (
         <div className="max-h-64 divide-y divide-border/40 overflow-y-auto rounded-md border border-border/60">
           {usersQuery.isLoading ? (
-            <p className="px-3 py-4 text-sm text-muted-foreground">Searching…</p>
+            <p className="px-3 py-4 text-sm text-muted-foreground">
+              {intl.formatMessage({
+                id: 'admin.shell.portalUserPicker.searching',
+                defaultMessage: 'Searching…',
+              })}
+            </p>
           ) : (usersQuery.data?.items.length ?? 0) === 0 ? (
-            <p className="px-3 py-4 text-sm text-muted-foreground">No users found.</p>
+            <p className="px-3 py-4 text-sm text-muted-foreground">
+              {intl.formatMessage({
+                id: 'admin.shell.portalUserPicker.noUsers',
+                defaultMessage: 'No users found.',
+              })}
+            </p>
           ) : (
             usersQuery.data!.items.map((u) => {
               const deliverable = !requireEmail || !!realEmail(u.email)

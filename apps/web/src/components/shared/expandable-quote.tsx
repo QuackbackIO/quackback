@@ -1,3 +1,4 @@
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { useState, useEffect, useRef } from 'react'
 import { cn } from '@/lib/shared/utils'
 
@@ -12,6 +13,7 @@ interface ExpandableQuoteProps {
  * Used for feedback quotes in suggestion triage and the create-from-suggestion dialog.
  */
 export function ExpandableQuote({ text, className }: ExpandableQuoteProps) {
+  const intl = useOptionalIntl()
   const [expanded, setExpanded] = useState(false)
   const [isClamped, setIsClamped] = useState(false)
   const ref = useRef<HTMLParagraphElement>(null)
@@ -34,7 +36,10 @@ export function ExpandableQuote({ text, className }: ExpandableQuoteProps) {
           onClick={() => setExpanded(false)}
           className="text-xs text-muted-foreground/50 hover:text-muted-foreground mt-0.5 cursor-pointer"
         >
-          Show less
+          {intl.formatMessage({
+            id: 'admin.shell.expandableQuote.showLess',
+            defaultMessage: 'Show less',
+          })}
         </button>
       </div>
     )
@@ -51,7 +56,10 @@ export function ExpandableQuote({ text, className }: ExpandableQuoteProps) {
           onClick={() => setExpanded(true)}
           className="text-xs text-muted-foreground/50 hover:text-muted-foreground mt-0.5 cursor-pointer"
         >
-          Show full message
+          {intl.formatMessage({
+            id: 'admin.shell.expandableQuote.showFull',
+            defaultMessage: 'Show full message',
+          })}
         </button>
       )}
     </div>

@@ -50,7 +50,7 @@ const AREAS: Record<MessageArea, { users: RegExp; importers: RegExp | null }> = 
     importers: null,
   },
   errorPage: {
-    users: /^components\/shared\/error-page\.tsx$/,
+    users: /^components\/shared\/(error-page|seat-paused-page)\.tsx$/,
     importers: null,
   },
   deviceSignIn: {

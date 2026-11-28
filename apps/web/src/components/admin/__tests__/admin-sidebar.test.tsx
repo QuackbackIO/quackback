@@ -213,7 +213,7 @@ const ALL_ON = {
 describe('buildRailItems', () => {
   it('orders Home, Feedback, Roadmap, Changelog, Support, Help center, Status, Analytics, Users', () => {
     const items = buildRailItems(ALL_ON, ALL_PERMISSIONS)
-    expect(items.map((i) => [i.label, i.href])).toEqual([
+    expect(items.map((i) => [i.label.defaultMessage, i.href])).toEqual([
       ['Home', '/admin'],
       ['Feedback', '/admin/feedback'],
       ['Roadmap', '/admin/roadmap'],
@@ -228,7 +228,7 @@ describe('buildRailItems', () => {
 
   it('keeps Home when every product is off', () => {
     const items = buildRailItems({}, ALL_PERMISSIONS)
-    expect(items.map((i) => i.label)).toEqual(['Home', 'Analytics', 'Users'])
+    expect(items.map((i) => i.label.defaultMessage)).toEqual(['Home', 'Analytics', 'Users'])
   })
 
   it('leaves out the pages a support-only custom role cannot open', () => {
@@ -240,36 +240,43 @@ describe('buildRailItems', () => {
       PERMISSIONS.CONVERSATION_SET_STATUS,
     ]
     // No roadmap.manage, so no Roadmap: its board opens on the roadmap list.
-    expect(buildRailItems(ALL_ON, billingAgent).map((i) => i.label)).toEqual(['Home', 'Support'])
-  })
-
-  it('leaves out Roadmap for a role that cannot list roadmaps, and Support for one that cannot list conversations or tickets', () => {
-    const triager = [PERMISSIONS.POST_VIEW_PRIVATE, PERMISSIONS.POST_SET_STATUS]
-    expect(buildRailItems(ALL_ON, triager).map((i) => i.label)).toEqual(['Home', 'Feedback'])
-    expect(
-      buildRailItems(ALL_ON, [...triager, PERMISSIONS.ROADMAP_MANAGE]).map((i) => i.label)
-    ).toEqual(['Home', 'Feedback', 'Roadmap'])
-    expect(buildRailItems(ALL_ON, [PERMISSIONS.TICKET_VIEW]).map((i) => i.label)).toEqual([
+    expect(buildRailItems(ALL_ON, billingAgent).map((i) => i.label.defaultMessage)).toEqual([
       'Home',
       'Support',
     ])
   })
 
+  it('leaves out Roadmap for a role that cannot list roadmaps, and Support for one that cannot list conversations or tickets', () => {
+    const triager = [PERMISSIONS.POST_VIEW_PRIVATE, PERMISSIONS.POST_SET_STATUS]
+    expect(buildRailItems(ALL_ON, triager).map((i) => i.label.defaultMessage)).toEqual([
+      'Home',
+      'Feedback',
+    ])
+    expect(
+      buildRailItems(ALL_ON, [...triager, PERMISSIONS.ROADMAP_MANAGE]).map(
+        (i) => i.label.defaultMessage
+      )
+    ).toEqual(['Home', 'Feedback', 'Roadmap'])
+    expect(
+      buildRailItems(ALL_ON, [PERMISSIONS.TICKET_VIEW]).map((i) => i.label.defaultMessage)
+    ).toEqual(['Home', 'Support'])
+  })
+
   it('leaves out Help center and Roadmap for the built-in Contributor, which cannot manage them', () => {
-    expect(buildRailItems(ALL_ON, SYSTEM_ROLE_PERMISSIONS.contributor).map((i) => i.label)).toEqual(
-      ['Home', 'Feedback', 'Changelog', 'Support', 'Status', 'Analytics', 'Users']
-    )
+    expect(
+      buildRailItems(ALL_ON, SYSTEM_ROLE_PERMISSIONS.contributor).map((i) => i.label.defaultMessage)
+    ).toEqual(['Home', 'Feedback', 'Changelog', 'Support', 'Status', 'Analytics', 'Users'])
   })
 
   it('shows Status to a role that only manages the page', () => {
-    expect(buildRailItems(ALL_ON, [PERMISSIONS.STATUS_PAGE_MANAGE]).map((i) => i.label)).toContain(
-      'Status'
-    )
+    expect(
+      buildRailItems(ALL_ON, [PERMISSIONS.STATUS_PAGE_MANAGE]).map((i) => i.label.defaultMessage)
+    ).toContain('Status')
   })
 
   it('matches Home on its own path only', () => {
     const items = buildRailItems(ALL_ON, ALL_PERMISSIONS)
-    expect(items.find((i) => i.label === 'Home')!.exact).toBe(true)
+    expect(items.find((i) => i.label.defaultMessage === 'Home')!.exact).toBe(true)
     expect(items.filter((i) => i.exact).length).toBe(1)
   })
 })

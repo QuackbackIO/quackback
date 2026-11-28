@@ -7,7 +7,7 @@
  * the toast library is fetched on the first toast instead of imported here:
  * a static import would put it on every page, the widget included.
  */
-import { describeError } from '@/lib/shared/describe-error'
+import { describeError, errorNoticeWords, referenceLabel } from '@/lib/shared/describe-error'
 import { errorAudience } from '@/lib/client/error-text'
 
 type Toast = (typeof import('sonner'))['toast']
@@ -43,23 +43,26 @@ export function toastError(error: unknown, fallback: string): void {
   }
 
   const { reference } = notice
+  const words = errorNoticeWords()
   withToast((toast) =>
     toast.error(notice.title, {
       description: reference ? (
         <>
           {notice.description}
-          <span className="mt-1 block font-mono text-xs opacity-70">Ref {reference}</span>
+          <span className="mt-1 block font-mono text-xs opacity-70">
+            {referenceLabel(reference)}
+          </span>
         </>
       ) : (
         notice.description
       ),
       action:
         notice.action === 'reload'
-          ? { label: 'Reload', onClick: () => window.location.reload() }
+          ? { label: words.reload, onClick: () => window.location.reload() }
           : notice.action === 'sign-in'
-            ? { label: 'Sign in', onClick: () => window.location.assign('/admin/login') }
+            ? { label: words.signIn, onClick: () => window.location.assign('/admin/login') }
             : reference
-              ? { label: 'Copy', onClick: () => void navigator.clipboard?.writeText(reference) }
+              ? { label: words.copy, onClick: () => void navigator.clipboard?.writeText(reference) }
               : undefined,
     })
   )

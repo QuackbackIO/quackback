@@ -256,7 +256,7 @@ function disabledSection(): OverviewSectionState {
   return { enabled: false, error: null }
 }
 function errorSection(): OverviewSectionState {
-  return { enabled: true, error: 'Couldn’t load this section.' }
+  return { enabled: true, error: 'load_failed' }
 }
 
 function disabledSupport() {

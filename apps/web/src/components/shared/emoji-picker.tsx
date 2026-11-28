@@ -1,3 +1,4 @@
+import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { memo, useEffect, useState } from 'react'
 import { FaceSmileIcon } from '@heroicons/react/24/outline'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -63,6 +64,7 @@ export const EmojiPicker = memo(function EmojiPicker({
   onSelect: (emoji: string) => void
   className?: string
 }) {
+  const intl = useOptionalIntl()
   const [open, setOpen] = useState(false)
   const [recents, setRecents] = useState<string[]>([])
 
@@ -88,7 +90,10 @@ export const EmojiPicker = memo(function EmojiPicker({
             'flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted',
             className
           )}
-          aria-label="Insert emoji"
+          aria-label={intl.formatMessage({
+            id: 'ui.emojiPicker.insert',
+            defaultMessage: 'Insert emoji',
+          })}
         >
           <FaceSmileIcon className="h-4 w-4" />
         </button>
@@ -96,7 +101,9 @@ export const EmojiPicker = memo(function EmojiPicker({
       <PopoverContent align="start" className="w-auto p-1.5">
         {recentRow.length > 0 && (
           <div className="mb-1">
-            <div className="px-0.5 pb-0.5 text-xs font-medium text-muted-foreground">Recent</div>
+            <div className="px-0.5 pb-0.5 text-xs font-medium text-muted-foreground">
+              {intl.formatMessage({ id: 'ui.emojiPicker.recent', defaultMessage: 'Recent' })}
+            </div>
             <div className="grid grid-cols-8 gap-0.5">
               {recentRow.map((emoji) => (
                 <EmojiCell key={`recent-${emoji}`} emoji={emoji} onPick={pick} />
@@ -106,7 +113,9 @@ export const EmojiPicker = memo(function EmojiPicker({
         )}
         <div>
           {recentRow.length > 0 && (
-            <div className="px-0.5 pb-0.5 text-xs font-medium text-muted-foreground">Popular</div>
+            <div className="px-0.5 pb-0.5 text-xs font-medium text-muted-foreground">
+              {intl.formatMessage({ id: 'ui.emojiPicker.popular', defaultMessage: 'Popular' })}
+            </div>
           )}
           <div className="grid grid-cols-8 gap-0.5">
             {popular.map((emoji) => (
