@@ -27,6 +27,11 @@ import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import type { TiptapContent } from '@/lib/server/db'
 import type { KbArticleId, KbCategoryId, PrincipalId } from '@quackback/ids'
 import { readJsonBody } from '@/lib/server/domains/api/request'
+import {
+  listArticleTranslationSummaries,
+  parseTranslationLocale,
+  readArticleInLanguage,
+} from '@/lib/server/domains/help-center/help-center-translation-api'
 
 const updateArticleBody = z.object({
   categoryId: z.string().optional(),
@@ -40,6 +45,7 @@ const updateArticleBody = z.object({
 
 function formatArticle(article: {
   id: string
+  locale: string
   slug: string
   title: string
   description: string | null
@@ -56,6 +62,7 @@ function formatArticle(article: {
 }) {
   return {
     id: article.id,
+    locale: article.locale,
     slug: article.slug,
     title: article.title,
     description: article.description,
@@ -88,7 +95,23 @@ export const Route = createFileRoute('/api/v1/help-center/articles/$articleId')(
           // help_center.manage.
           await assertArticleOpenToKey(access, articleId)
           const article = await getArticleById(articleId)
-          return successResponse(formatArticle(article))
+          const requested = new URL(request.url).searchParams.get('locale')
+          const [translations, text] = await Promise.all([
+            listArticleTranslationSummaries(articleId, article.textRevision),
+            requested
+              ? readArticleInLanguage(article, parseTranslationLocale(requested), {
+                  includeDrafts: access.manages,
+                })
+              : null,
+          ])
+          return successResponse({
+            ...formatArticle(article),
+            ...(text ?? {}),
+            // A draft translation is team material, like a draft article.
+            translations: access.manages
+              ? translations
+              : translations.filter((t) => t.status === 'published'),
+          })
         } catch (error) {
           return handleDomainError(error)
         }

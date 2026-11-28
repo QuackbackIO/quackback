@@ -336,6 +336,31 @@ export const P = {
   'article.published': z.looseObject({ articleId: id, title: z.string() }),
   'article.updated': z.looseObject({ articleId: id, changedKeys: z.array(z.string()) }),
   'article.deleted': z.looseObject({ articleId: id }),
+  // Help center translations: one language of an article.
+  'article.translation_published': z.looseObject({
+    articleId: id,
+    locale: z.string(),
+    title: z.string(),
+  }),
+  'article.translation_updated': z.looseObject({
+    articleId: id,
+    locale: z.string(),
+    title: z.string(),
+    status: z.enum(['draft', 'published']),
+  }),
+  'article.translation_needs_update': z.looseObject({
+    articleId: id,
+    locale: z.string(),
+    articleRevision: z.number().int(),
+    translationRevision: z.number().int(),
+  }),
+  'article.translation_update_ready': z.looseObject({
+    articleId: id,
+    locale: z.string(),
+    articleRevision: z.number().int(),
+    checksPassed: z.boolean(),
+    problems: z.array(z.object({ code: z.string(), detail: z.string().optional() })),
+  }),
   // --- WO-6c: crm / ops plane (new, catalogue-only) ---
   'company.created': z.looseObject({ companyId: id, name: z.string() }),
   'company.deleted': z.looseObject({ companyId: id }),

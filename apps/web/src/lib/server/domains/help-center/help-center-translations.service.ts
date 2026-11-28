@@ -20,6 +20,10 @@ import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { markdownToTiptapJson } from '@/lib/server/markdown-tiptap'
 import { cancelPendingAutoTranslations } from './help-center-translate-jobs'
 import {
+  announceTranslationPublished,
+  announceTranslationUpdated,
+} from './help-center-translation-events'
+import {
   getArticleSource,
   type TranslationSourceText,
 } from './help-center-translation-versions.service'
@@ -190,6 +194,12 @@ export async function upsertArticleTranslation(
       },
     })
     .returning()
+  if (manual) {
+    void announceTranslationUpdated(row.articleId, row.locale, row.title, row.status)
+    if (input.status === 'published') {
+      void announceTranslationPublished(row.articleId, row.locale, row.title)
+    }
+  }
   return row
 }
 
@@ -262,6 +272,7 @@ export async function setArticleTranslationStatus(
       'Save the translation before publishing it'
     )
   }
+  if (status === 'published') void announceTranslationPublished(articleId, locale, row.title)
   return row
 }
 

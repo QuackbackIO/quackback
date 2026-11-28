@@ -286,6 +286,7 @@ export const UNTRUSTED_TOOL_FIELDS = {
   update_article: [ARTICLE_AUTHOR],
   delete_article: NONE,
   manage_category: NONE,
+  translate_article: NONE,
 
   // A subject is an email subject, an issue title, or a preview of the first message.
   list_conversations: ['conversations[].subject'],

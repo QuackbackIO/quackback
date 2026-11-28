@@ -27,6 +27,7 @@ import { getHelpCenterConfig } from '@/lib/server/domains/settings/settings.serv
 import { isFeatureLive } from '@/lib/server/domains/plan-limits/plan-limits.service'
 import { logger } from '@/lib/server/logger'
 import { enqueueHelpCenterTranslateJob } from './help-center-translate-queue'
+import { announceTranslationsBehind } from './help-center-translation-events'
 
 const log = logger.child({ component: 'help-center-translation-upkeep' })
 
@@ -64,6 +65,9 @@ export async function queueTranslationUpkeep(article: {
   textRevision: number
   publishedAt: Date | null
 }): Promise<void> {
+  await announceTranslationsBehind(article.id, article.textRevision).catch((err) =>
+    log.error({ err, article_id: article.id }, 'failed to announce translations behind')
+  )
   if (!article.publishedAt) return
   try {
     const helpCenter = await getHelpCenterConfig()

@@ -892,7 +892,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/workspace-api-key-settings.ts`::fetchWorkspaceKeyRolesFn | api_key.manage |
 | `lib/server/functions/workspace-wipe.ts`::wipeCloudWorkspaceFn | END_USER (any authenticated) |
 
-### Public REST API (`withApiKeyAuth`) — 131 surfaces
+### Public REST API (`withApiKeyAuth`) — 139 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -936,11 +936,19 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `routes/api/v1/conversations/index.ts`::GET | conversation.view |
 | `routes/api/v1/files/index.ts`::POST | conversation.reply |
 | `routes/api/v1/help-center/articles/$articleId.feedback.ts`::POST | DYNAMIC (help_center.manage) |
+| `routes/api/v1/help-center/articles/$articleId.translations.$locale.ai-draft.ts`::POST | help_center.manage |
+| `routes/api/v1/help-center/articles/$articleId.translations.$locale.discard-update.ts`::POST | help_center.manage |
+| `routes/api/v1/help-center/articles/$articleId.translations.$locale.mark-current.ts`::POST | help_center.manage |
+| `routes/api/v1/help-center/articles/$articleId.translations.$locale.publish-update.ts`::POST | help_center.manage |
+| `routes/api/v1/help-center/articles/$articleId.translations.$locale.ts`::PUT | help_center.manage |
+| `routes/api/v1/help-center/articles/$articleId.translations.$locale.ts`::DELETE | help_center.manage |
 | `routes/api/v1/help-center/articles/$articleId.ts`::GET | DYNAMIC (help_center.manage) |
 | `routes/api/v1/help-center/articles/$articleId.ts`::PATCH | help_center.manage |
 | `routes/api/v1/help-center/articles/$articleId.ts`::DELETE | help_center.manage |
 | `routes/api/v1/help-center/articles/index.ts`::GET | DYNAMIC (help_center.manage) |
 | `routes/api/v1/help-center/articles/index.ts`::POST | help_center.manage |
+| `routes/api/v1/help-center/categories/$categoryId.translations.$locale.ts`::PUT | help_center.manage |
+| `routes/api/v1/help-center/categories/$categoryId.translations.$locale.ts`::DELETE | help_center.manage |
 | `routes/api/v1/help-center/categories/$categoryId.ts`::GET | DYNAMIC (help_center.manage) |
 | `routes/api/v1/help-center/categories/$categoryId.ts`::PATCH | help_center.manage |
 | `routes/api/v1/help-center/categories/$categoryId.ts`::DELETE | help_center.manage |
@@ -1049,7 +1057,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 3. MCP tools
 
-43 tools. "Team" = requires an admin/member role in addition to the scope.
+44 tools. "Team" = requires an admin/member role in addition to the scope.
 
 | Tool | Scope(s) | Team |
 | --- | --- | :---: |
@@ -1086,6 +1094,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | set_conversation_status | write:chat | ✓ |
 | share_post | write:chat | ✓ |
 | suggest_post | write:chat | ✓ |
+| translate_article | write:article | ✓ |
 | triage_post | write:feedback | ✓ |
 | unlink_ticket | write:chat | ✓ |
 | unmerge_post | write:feedback | ✓ |
@@ -1109,7 +1118,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-241 of 1130 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+241 of 1138 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 

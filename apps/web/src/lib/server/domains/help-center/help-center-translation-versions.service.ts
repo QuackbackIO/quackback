@@ -31,6 +31,7 @@ import type { SQL } from 'drizzle-orm'
 import type { KbArticleId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import type { HelpCenterArticleTranslation, TranslationStatus } from './help-center.types'
+import { announceTranslationUpdated } from './help-center-translation-events'
 
 export type { TranslationCheckResult, TranslationSourceText }
 
@@ -315,6 +316,7 @@ export async function publishPendingTranslationUpdate(
       'There is no update waiting for this language'
     )
   }
+  void announceTranslationUpdated(articleId, locale, row.title, row.status)
   return row
 }
 

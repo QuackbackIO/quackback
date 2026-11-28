@@ -36,6 +36,10 @@ import {
 } from './help-center-translation-versions.service'
 import { prepareTranslationText, restoreTranslationText } from './help-center-translation-text'
 import { checkTranslation } from './help-center-translation-checks'
+import {
+  announceTranslationUpdated,
+  announceTranslationUpdateReady,
+} from './help-center-translation-events'
 import { logger } from '@/lib/server/logger'
 import type { KbArticleId } from '@quackback/ids'
 import { oneShotThreadId } from '@/lib/server/domains/ai/thread-id'
@@ -296,6 +300,7 @@ export async function runArticleTranslation(
       return { kind: 'skipped', reason: 'current' }
     }
     log.info({ article_id: articleId, locale, ok: check.ok }, 'auto-translate: update waiting')
+    void announceTranslationUpdateReady(articleId, locale, source.revision, check)
     return { kind: 'update', check }
   }
 
@@ -315,6 +320,7 @@ export async function runArticleTranslation(
     return { kind: 'skipped', reason: 'changed' }
   }
   log.info({ article_id: articleId, locale, ok: check.ok }, 'auto-translate: draft written')
+  void announceTranslationUpdated(articleId, locale, result.title, 'draft')
   return { kind: 'draft', check }
 }
 

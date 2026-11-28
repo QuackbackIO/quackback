@@ -30,6 +30,7 @@ export const TOOL_SCOPES: Readonly<Record<string, McpScope>> = {
   update_article: 'write:article',
   delete_article: 'write:article',
   manage_category: 'write:article',
+  translate_article: 'write:article',
   list_conversations: 'read:chat',
   get_conversation: 'read:chat',
   reply_to_conversation: 'write:chat',

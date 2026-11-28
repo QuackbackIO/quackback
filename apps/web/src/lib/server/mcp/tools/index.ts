@@ -19,6 +19,7 @@
  * - suggestions.ts   accept_suggestion, dismiss_suggestion, restore_suggestion
  * - help-center.ts   create_article, update_article, delete_article,
  *                    manage_category
+ * - help-center-translations.ts translate_article
  * - conversations.ts list_conversations, get_conversation,
  *                    reply_to_conversation, suggest_post, share_post,
  *                    set_conversation_status
@@ -39,6 +40,7 @@ import { registerCommentTools } from './comments'
 import { registerChangelogTools } from './changelog'
 import { registerSuggestionTools } from './suggestions'
 import { registerHelpCenterTools } from './help-center'
+import { registerHelpCenterTranslationTools } from './help-center-translations'
 import { registerConversationTools } from './conversations'
 import { registerTicketTools } from './tickets'
 import { registerFileTools } from './files'
@@ -53,6 +55,7 @@ export function registerTools(server: McpServer, auth: McpAuthContext) {
   registerChangelogTools(server, auth)
   registerSuggestionTools(server, auth)
   registerHelpCenterTools(server, auth)
+  registerHelpCenterTranslationTools(server, auth)
   registerConversationTools(server, auth)
   registerTicketTools(server, auth)
   registerFileTools(server, auth)

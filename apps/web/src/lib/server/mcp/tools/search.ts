@@ -15,11 +15,7 @@ import { getPostWithDetails, getCommentsWithReplies } from '@/lib/server/domains
 import { getMergedPosts } from '@/lib/server/domains/posts/post.merge'
 import { getChangelogById } from '@/lib/server/domains/changelog/changelog.service'
 import { listChangelogs } from '@/lib/server/domains/changelog/changelog.query'
-import {
-  listArticles,
-  getArticleById,
-  getCategoryById,
-} from '@/lib/server/domains/help-center/help-center.service'
+import { listArticles, getCategoryById } from '@/lib/server/domains/help-center/help-center.service'
 import { ensureTypeId, getTypeIdPrefix } from '@quackback/ids'
 import { truncate } from '@/lib/shared/utils/string'
 import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
@@ -29,11 +25,15 @@ import type {
   BoardId,
   PostTagId,
   ChangelogId,
-  KbArticleId,
   KbCategoryId,
   PrincipalId,
 } from '@quackback/ids'
 import type { McpAuthContext } from '../types'
+import { LOCALE_DESCRIBE, articleDetailsResult } from './help-center-translations'
+import {
+  parseTranslationLocale,
+  readArticleInLanguage,
+} from '@/lib/server/domains/help-center/help-center-translation-api'
 import {
   registerTool,
   requireScope,
@@ -45,7 +45,6 @@ import {
   encodeSearchCursor,
   decodeSearchCursor,
   parseFlexibleDate,
-  articleResult,
   categoryResult,
   withAuthorFacts,
   READ_ONLY,
@@ -109,6 +108,12 @@ const searchSchema = {
     .string()
     .optional()
     .describe('Filter posts by author email, or "me" for the authenticated teammate'),
+  locale: z
+    .string()
+    .optional()
+    .describe(
+      `Articles only: show each result in this language, with locale and fallback (true when the article has no version in it and its own text is shown). The query matches the articles' own text. ${LOCALE_DESCRIBE}`
+    ),
 }
 
 /** What each search entity reveals, matching the REST list endpoints. */
@@ -142,6 +147,12 @@ const getDetailsSchema = {
     .describe(
       'TypeID of the entity to fetch (e.g., post_01abc..., changelog_01xyz...). Entity type is auto-detected from the prefix.'
     ),
+  locale: z
+    .string()
+    .optional()
+    .describe(
+      `Articles only: read the article in this language. The answer's locale says which language the text is in, and fallback is true when the article has no version in it and its own text was returned. ${LOCALE_DESCRIBE}`
+    ),
 }
 
 // ============================================================================
@@ -165,9 +176,10 @@ type SearchArgs = {
   cursor?: string
   authorPrincipalId?: string
   authorEmail?: string
+  locale?: string
 }
 
-type GetDetailsArgs = { id: string }
+type GetDetailsArgs = { id: string; locale?: string }
 
 // ============================================================================
 // Tool registration
@@ -189,6 +201,7 @@ Examples:
 - Search changelogs: search({ entity: "changelogs", status: "published" })
 - Search articles: search({ entity: "articles", query: "getting started" })
 - Filter articles by category: search({ entity: "articles", categoryId: "kb_category_01abc..." })
+- Articles in French: search({ entity: "articles", query: "billing", locale: "fr" })
 - Sort by votes: search({ sort: "votes", limit: 10 })
 - Posts created by the authenticated teammate: search({ authorPrincipalId: "me" })
 - Posts created by an email: search({ authorEmail: "ada@acme.com" })`,
@@ -237,6 +250,7 @@ Examples:
 - Get a post: get_details({ id: "post_01abc..." })
 - Get a changelog: get_details({ id: "changelog_01xyz..." })
 - Get an article: get_details({ id: "article_01abc..." })
+- Get an article in German: get_details({ id: "article_01abc...", locale: "de" })
 - Get a category: get_details({ id: "kb_category_01abc..." })`,
     schema: getDetailsSchema,
     annotations: READ_ONLY,
@@ -287,7 +301,7 @@ Examples:
           // unauthenticated path for the published slice.
           const roleDenied = requireTeamRole(auth)
           if (roleDenied) return roleDenied
-          return getArticleDetails(ensureTypeId(args.id, 'article'))
+          return articleDetailsResult(ensureTypeId(args.id, 'article'), args.locale)
         }
         case 'kb_category': {
           const flagDenied = await requireHelpCenter()
@@ -470,14 +484,24 @@ async function searchArticles(args: SearchArgs): Promise<CallToolResult> {
   const lastItem = result.items[result.items.length - 1]
   const nextCursor = result.hasMore && lastItem ? encodeSearchCursor('articles', lastItem.id) : null
 
+  const locale = args.locale ? parseTranslationLocale(args.locale) : null
+  const texts = locale
+    ? await Promise.all(
+        result.items.map((a) => readArticleInLanguage(a, locale, { includeDrafts: true }))
+      )
+    : null
+
   return withAuthorFacts(
     compactJsonResult({
-      articles: result.items.map((a) => ({
+      articles: result.items.map((a, i) => ({
         id: a.id,
         slug: a.slug,
-        title: a.title,
-        excerpt: a.content ? truncate(a.content, 200) : '',
-        description: a.description,
+        ...(texts
+          ? { locale: texts[i].locale, fallback: texts[i].fallback }
+          : { locale: a.locale }),
+        title: texts?.[i].title ?? a.title,
+        excerpt: truncate(texts?.[i].content ?? a.content ?? '', 200),
+        description: texts ? texts[i].description : a.description,
         status: a.publishedAt ? 'published' : 'draft',
         categoryId: a.category.id,
         categoryName: a.category.name,
@@ -596,11 +620,6 @@ async function getChangelogDetails(changelogId: ChangelogId): Promise<CallToolRe
     updatedAt: entry.updatedAt,
   })
   return withAuthorFacts(result, [['', entry.author?.id]])
-}
-
-async function getArticleDetails(articleId: KbArticleId): Promise<CallToolResult> {
-  const article = await getArticleById(articleId)
-  return articleResult(article)
 }
 
 async function getCategoryDetails(categoryId: KbCategoryId): Promise<CallToolResult> {

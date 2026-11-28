@@ -102,6 +102,11 @@ describe('event catalogue coverage', () => {
     'maintenance_started',
     'maintenance_completed',
     'component_changed',
+    // help center translations: one language of an article
+    'translation_published',
+    'translation_updated',
+    'translation_needs_update',
+    'translation_update_ready',
   ])
 
   it('every entity is a @quackback/ids key (or an allowlisted virtual entity)', () => {
