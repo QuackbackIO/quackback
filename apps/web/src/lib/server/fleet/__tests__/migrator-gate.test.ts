@@ -400,6 +400,7 @@ describe('replayGateVerdict', () => {
       '0323_clear_legacy_header_settings',
       '0324_changelog_announce_on_launcher',
       '0325_language_config',
+      '0326_kb_articles_locale',
     ])
     const verdict = replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)
     expect(verdict.ok).toBe(false)

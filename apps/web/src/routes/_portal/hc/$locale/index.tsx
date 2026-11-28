@@ -58,6 +58,7 @@ export const Route = createFileRoute('/_portal/hc/$locale/')({
 
     return {
       categories,
+      mainLanguage: helpCenterConfig?.locales?.default ?? 'en',
       // Unset chrome falls back to the default copy in the app's language,
       // on the page and in its metadata.
       title: chrome?.homepageTitle || null,
@@ -74,7 +75,7 @@ export const Route = createFileRoute('/_portal/hc/$locale/')({
     if (!loaderData) return {}
     const { workspaceName, logoUrl } = loaderData
     const { helpUrl } = helpCenterHeadPortal(matches)
-    const canonicalUrl = helpUrl(localizedHcPath(params.locale, '/hc'))
+    const canonicalUrl = helpUrl(localizedHcPath(params.locale, '/hc', loaderData.mainLanguage))
     const messages = helpCenterHeadMessages(matches)
     const { title, description } = landingCopy(
       loaderData.title,

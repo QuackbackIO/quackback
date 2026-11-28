@@ -123,7 +123,7 @@ export function buildHelpCenterSitemapUrlsMultiLocale(
   const at = urlMaker(baseUrl)
 
   const landingByLocale = new Map(
-    perLocale.map(({ locale }) => [locale, at(localizedHcPath(locale, '/hc'))])
+    perLocale.map(({ locale }) => [locale, at(localizedHcPath(locale, '/hc', defaultLocale))])
   )
   for (const locale of landingByLocale.keys()) {
     urls.push({

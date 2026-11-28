@@ -78,6 +78,13 @@ async function portalLetsCallerIn(): Promise<boolean> {
 
 /** For a write or a single read: "not found" when the portal turns the
  *  caller away, as the page's sign-in wall has it. */
+
+/** The help center's main language: where a request without a language reads. */
+async function helpCenterMainLanguage(): Promise<string> {
+  const { getHelpCenterConfig } = await import('@/lib/server/domains/settings/settings.service')
+  return (await getHelpCenterConfig()).locales?.default ?? 'en'
+}
+
 export const assertHelpCenterOpenToRequest = createServerOnlyFn(
   async function assertHelpCenterOpenToRequest(): Promise<void> {
     if (!(await portalLetsCallerIn())) {
@@ -173,8 +180,8 @@ export const listPublicCategoriesFn = createServerFn({ method: 'GET' })
     if (!reader) return []
     const { listPublicCategoriesForLocale } =
       await import('@/lib/server/domains/help-center/help-center-locale.query')
-    const { DEFAULT_LOCALE } = await import('@/lib/shared/i18n')
-    const categories = await listPublicCategoriesForLocale(data.locale ?? DEFAULT_LOCALE, reader)
+    const mainLocale = await helpCenterMainLanguage()
+    const categories = await listPublicCategoriesForLocale(data.locale ?? mainLocale, reader)
     return categories.map(serializeCategory)
   })
 
@@ -195,10 +202,10 @@ export const getPublicCategoryBySlugFn = createServerFn({ method: 'GET' })
     // help-center traffic.
     const { getPublicCategoryBySlugForLocale } =
       await import('@/lib/server/domains/help-center/help-center-locale.query')
-    const { DEFAULT_LOCALE } = await import('@/lib/shared/i18n')
+    const mainLocale = await helpCenterMainLanguage()
     const category = await getPublicCategoryBySlugForLocale(
       data.slug,
-      data.locale ?? DEFAULT_LOCALE,
+      data.locale ?? mainLocale,
       await publicViewer()
     )
     return serializeCategory(category)
@@ -299,10 +306,10 @@ export const listPublicArticlesForCategoryFn = createServerFn({ method: 'GET' })
     if (!reader) return []
     const { listPublicArticlesForCategoryLocale } =
       await import('@/lib/server/domains/help-center/help-center-locale.query')
-    const { DEFAULT_LOCALE } = await import('@/lib/shared/i18n')
+    const mainLocale = await helpCenterMainLanguage()
     const articles = await listPublicArticlesForCategoryLocale(
       data.categoryId,
-      data.locale ?? DEFAULT_LOCALE,
+      data.locale ?? mainLocale,
       reader
     )
     return articles.map((a) => ({
@@ -328,8 +335,8 @@ export const getPublicCategoryPageFn = createServerFn({ method: 'GET' })
       listPublicCategoriesForLocale,
       listPublicArticlesForCategoriesLocale,
     } = await import('@/lib/server/domains/help-center/help-center-locale.query')
-    const { DEFAULT_LOCALE } = await import('@/lib/shared/i18n')
-    const locale = data.locale ?? DEFAULT_LOCALE
+    const mainLocale = await helpCenterMainLanguage()
+    const locale = data.locale ?? mainLocale
     const viewer = await publicViewer()
 
     const category = await getPublicCategoryBySlugForLocale(data.slug, locale, viewer)
@@ -385,10 +392,10 @@ export const getPublicArticlePageFn = createServerFn({ method: 'GET' })
       listPublicArticlesForCategoryLocale,
       localizeRelatedArticles,
     } = await import('@/lib/server/domains/help-center/help-center-locale.query')
-    const { DEFAULT_LOCALE } = await import('@/lib/shared/i18n')
+    const mainLocale = await helpCenterMainLanguage()
     const { getRelatedArticles, RELATED_ARTICLES_LIMIT } =
       await import('@/lib/server/domains/help-center/help-center-related.service')
-    const locale = data.locale ?? DEFAULT_LOCALE
+    const locale = data.locale ?? mainLocale
     const viewer = await publicViewer()
 
     const article = await getPublicArticleByUrlIdForLocale(parsed.urlId, locale, viewer)
@@ -439,8 +446,8 @@ export const getPublicCollectionPageFn = createServerFn({ method: 'GET' })
       listPublicCategoriesForLocale,
       listPublicArticlesForCategoriesLocale,
     } = await import('@/lib/server/domains/help-center/help-center-locale.query')
-    const { DEFAULT_LOCALE } = await import('@/lib/shared/i18n')
-    const locale = data.locale ?? DEFAULT_LOCALE
+    const mainLocale = await helpCenterMainLanguage()
+    const locale = data.locale ?? mainLocale
     const viewer = await publicViewer()
 
     const category = await getPublicCategoryByUrlIdForLocale(parsed.urlId, locale, viewer)
@@ -497,10 +504,10 @@ export const getPublicArticleBySlugFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     const { getPublicArticleBySlugForLocale } =
       await import('@/lib/server/domains/help-center/help-center-locale.query')
-    const { DEFAULT_LOCALE } = await import('@/lib/shared/i18n')
+    const mainLocale = await helpCenterMainLanguage()
     const article = await getPublicArticleBySlugForLocale(
       data.slug,
-      data.locale ?? DEFAULT_LOCALE,
+      data.locale ?? mainLocale,
       await publicViewer()
     )
     const { helpfulCount: _h, notHelpfulCount: _n, ...publicArticle } = serializeArticle(article)
@@ -668,12 +675,12 @@ export const resolvePublicArticleRefFn = createServerFn({ method: 'GET' })
     const { canonicalArticleTypeId } = await import('@/lib/shared/widget/article-ref')
     const { getPublicArticleByIdForLocale, getPublicArticleBySlugForLocale } =
       await import('@/lib/server/domains/help-center/help-center-locale.query')
-    const { DEFAULT_LOCALE } = await import('@/lib/shared/i18n')
+    const mainLocale = await helpCenterMainLanguage()
     const { NotFoundError } = await import('@/lib/shared/errors')
     const { withDefaultLocaleFallback } = await import('@/lib/shared/widget/article-locale')
     const viewer = await resolveHelpPublicReader()
     if (!viewer) return null
-    const locale = data.locale ?? DEFAULT_LOCALE
+    const locale = data.locale ?? mainLocale
     try {
       const kbId = canonicalArticleTypeId(data.ref)
       const load = (loc: string) =>
@@ -682,7 +689,7 @@ export const resolvePublicArticleRefFn = createServerFn({ method: 'GET' })
           : getPublicArticleBySlugForLocale(data.ref, loc, viewer)
       const { value: article, locale: resolvedLocale } = await withDefaultLocaleFallback(
         locale,
-        DEFAULT_LOCALE,
+        mainLocale,
         load,
         (err) => err instanceof NotFoundError
       )

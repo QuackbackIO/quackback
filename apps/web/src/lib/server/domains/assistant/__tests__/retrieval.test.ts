@@ -11,6 +11,7 @@ vi.mock('@/lib/server/domains/help-center/help-center-embedding.service', () => 
 const mockLimit = vi.fn()
 
 vi.mock('@/lib/server/db', () => ({
+  localeRegconfigCaseSql: () => "'english'::regconfig",
   db: {
     select: vi.fn(() => ({
       from: vi.fn().mockReturnValue({

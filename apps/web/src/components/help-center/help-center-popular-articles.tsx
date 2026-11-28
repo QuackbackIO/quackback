@@ -1,7 +1,7 @@
 import { Link } from '@tanstack/react-router'
 import { FormattedMessage } from 'react-intl'
 import { DocumentTextIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
-import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
+import { useHelpCenterMainLanguage } from '@/lib/client/hooks/use-help-center-main-language'
 import { hcArticlePath } from '@/lib/shared/help-center-url'
 
 export interface PopularArticle {
@@ -18,6 +18,7 @@ interface HelpCenterPopularArticlesProps {
 }
 
 export function HelpCenterPopularArticles({ articles }: HelpCenterPopularArticlesProps) {
+  const mainLanguage = useHelpCenterMainLanguage()
   if (articles.length === 0) return null
 
   return (
@@ -31,7 +32,7 @@ export function HelpCenterPopularArticles({ articles }: HelpCenterPopularArticle
             key={article.id}
             to={
               hcArticlePath({
-                locale: DEFAULT_LOCALE,
+                locale: mainLanguage,
                 urlId: article.urlId,
                 slug: article.slug,
               }) as '/hc'

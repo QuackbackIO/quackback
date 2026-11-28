@@ -2122,6 +2122,13 @@
       "when": 1791006500000,
       "tag": "0325_language_config",
       "breakpoints": true
+    },
+    {
+      "idx": 303,
+      "version": "7",
+      "when": 1791006600000,
+      "tag": "0326_kb_articles_locale",
+      "breakpoints": true
     }
   ]
 }

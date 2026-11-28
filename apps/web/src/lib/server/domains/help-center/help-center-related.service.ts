@@ -21,7 +21,7 @@ import {
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
 import {
   helpCenterVisibilityConditions,
-  orTermsTsQuery,
+  orTermsTsQueryForArticles,
   KEYWORD_RANK_FLOOR,
 } from './help-center-search.service'
 
@@ -116,7 +116,7 @@ export async function getRelatedArticles(
       AND 1 - (${helpCenterArticles.embedding} <=> ${vectorStr}::vector) > ${RELATED_ARTICLE_SIMILARITY_FLOOR}
     )`
   } else {
-    const tsQuery = orTermsTsQuery(source.title)
+    const tsQuery = orTermsTsQueryForArticles(source.title)
     scoreExpr = sql<number>`ts_rank(${helpCenterArticles.searchVector}, ${tsQuery})`.as(
       'related_score'
     )

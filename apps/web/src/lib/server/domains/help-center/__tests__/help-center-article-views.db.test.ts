@@ -23,6 +23,10 @@ import {
   eq,
 } from '@/lib/server/db'
 
+vi.mock('@/lib/server/domains/settings/settings.service', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/domains/settings/settings.service')>()),
+  getHelpCenterConfig: async () => ({ locales: { default: 'en', additional: [], chrome: {} } }),
+}))
 vi.mock('@/lib/server/db', async (original) => ({
   ...(await original<typeof import('@/lib/server/db')>()),
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,

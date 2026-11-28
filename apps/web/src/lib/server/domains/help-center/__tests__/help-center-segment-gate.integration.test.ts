@@ -19,6 +19,10 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
 import { sql } from 'drizzle-orm'
 
+vi.mock('@/lib/server/domains/settings/settings.service', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/domains/settings/settings.service')>()),
+  getHelpCenterConfig: async () => ({ locales: { default: 'en', additional: [], chrome: {} } }),
+}))
 vi.mock('../help-center-embedding.service', () => ({
   generateKbQueryEmbedding: vi.fn().mockResolvedValue(null),
   generateKbEmbedding: vi.fn().mockResolvedValue(null),

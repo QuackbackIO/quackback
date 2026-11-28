@@ -300,10 +300,13 @@ export async function createArticle(
   if (chosen) await assertLiveCategory(chosen)
   const categoryId = chosen || (await ensureDefaultHelpCategory())
 
+  const { getMainLanguage } = await import('@/lib/server/domains/settings/settings.service')
+  const mainLanguage = await getMainLanguage()
   const [article] = await db
     .insert(helpCenterArticles)
     .values({
       categoryId,
+      locale: mainLanguage,
       title,
       // Store the markdown projection of the canonical contentJson so the
       // article list endpoint (which omits contentJson) still serves images.

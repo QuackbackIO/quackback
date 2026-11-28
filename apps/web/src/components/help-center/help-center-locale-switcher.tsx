@@ -56,7 +56,7 @@ export function HelpCenterLocaleSwitcher({
       // 1 year, readable by the server for the browser-detect redirect on /hc.
       document.cookie = `${HC_LOCALE_COOKIE}=${next}; path=/hc; max-age=31536000; samesite=lax`
     }
-    const target = localizedHcPath(next, canonicalPath)
+    const target = localizedHcPath(next, canonicalPath, defaultLocale)
     void navigate({ to: target as string as '/', replace: true })
   }
 

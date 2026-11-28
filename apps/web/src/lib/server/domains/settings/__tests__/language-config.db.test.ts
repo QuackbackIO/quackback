@@ -6,8 +6,16 @@
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { createId } from '@quackback/ids'
-import { settings, sql } from '@/lib/server/db'
+import { createId, toUuid, type KbArticleId, type PrincipalId, type UserId } from '@quackback/ids'
+import {
+  eq,
+  helpCenterArticles,
+  helpCenterCategories,
+  principal,
+  settings,
+  sql,
+  user,
+} from '@/lib/server/db'
 import { ValidationError } from '@/lib/shared/errors'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
@@ -92,6 +100,27 @@ describe.skipIf(!fixture.available)('the workspace languages', () => {
     expect((await getHelpCenterConfig('fresh')).locales.default).toBe('en')
   })
 
+  it('relabels every article, so search stems it by the new main language', async () => {
+    await storeHelpCenterLocales({ default: 'en', additional: [] })
+    const articleId = await seedArticle('Einstellungen öffnen', 'Öffne die Einstellungen.')
+    // English rules leave the German word whole.
+    expect(await vectorOf(articleId)).toContain("'einstellungen'")
+
+    await updateLanguageConfig({ mainLanguage: 'de' })
+
+    const [row] = await testDb
+      .select({ locale: helpCenterArticles.locale })
+      .from(helpCenterArticles)
+      .where(eq(helpCenterArticles.id, articleId))
+    expect(row.locale).toBe('de')
+    // German rules stem it, as a German search for "Einstellung" does.
+    expect(await vectorOf(articleId)).toContain("'einstell'")
+    const [{ hit }] = await testDb.execute<{ hit: boolean }>(sql`
+      SELECT search_vector @@ websearch_to_tsquery('german', 'Einstellung') AS hit
+      FROM kb_articles WHERE id = ${toUuid(articleId)}`)
+    expect(hit).toBe(true)
+  })
+
   it('refuses a language the product does not have', async () => {
     await storeHelpCenterLocales({ default: 'en', additional: [] })
     await expect(updateLanguageConfig({ mainLanguage: 'xx' })).rejects.toBeInstanceOf(
@@ -99,3 +128,33 @@ describe.skipIf(!fixture.available)('the workspace languages', () => {
     )
   })
 })
+
+async function seedArticle(title: string, content: string): Promise<KbArticleId> {
+  const userId = createId('user') as UserId
+  await testDb.insert(user).values({ id: userId, name: 'Editor', email: `${userId}@example.com` })
+  const principalId = createId('principal') as PrincipalId
+  await testDb
+    .insert(principal)
+    .values({ id: principalId, userId, role: 'admin', type: 'user', createdAt: new Date() })
+  const categoryId = createId('kb_category')
+  await testDb
+    .insert(helpCenterCategories)
+    .values({ id: categoryId as never, slug: `c-${categoryId}`, name: 'Allgemein' })
+  const articleId = createId('kb_article') as KbArticleId
+  await testDb.insert(helpCenterArticles).values({
+    id: articleId,
+    categoryId: categoryId as never,
+    slug: `a-${articleId}`,
+    title,
+    content,
+    principalId,
+  } as never)
+  return articleId
+}
+
+async function vectorOf(articleId: KbArticleId): Promise<string> {
+  const [row] = await testDb.execute<{ v: string }>(
+    sql`SELECT search_vector::text AS v FROM kb_articles WHERE id = ${toUuid(articleId)}`
+  )
+  return row.v
+}

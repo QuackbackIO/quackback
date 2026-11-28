@@ -25,6 +25,7 @@ export type SettingsColumn =
   | 'help_center_config'
   | 'metadata'
   | 'developer_config'
+  | 'language_config'
 
 /** Dotted path -> value, per column. A value of `undefined` deletes the key. */
 export type SettingsPatch = Partial<Record<SettingsColumn, Record<string, unknown>>>

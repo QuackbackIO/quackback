@@ -141,8 +141,13 @@ export const helpCenterArticles = pgTable(
     notHelpfulCount: integer('not_helpful_count').default(0).notNull(),
     /** Public numeric id used in `/hc/{locale}/articles/{urlId}-{slug}`. */
     urlId: integer('url_id').generatedByDefaultAsIdentity().notNull(),
+    /**
+     * The article's language: the workspace's main language. Search stems
+     * the article by it. Changing the main language relabels every article.
+     */
+    locale: text('locale').notNull().default('en'),
     searchVector: tsvector('search_vector').generatedAlwaysAs(
-      sql`setweight(to_tsvector('english', coalesce(title, '')), 'A') || setweight(to_tsvector('english', coalesce(content, '')), 'B')`
+      sql`setweight(to_tsvector(${sql.raw(localeRegconfigCaseSql('locale'))}, coalesce(title, '')), 'A') || setweight(to_tsvector(${sql.raw(localeRegconfigCaseSql('locale'))}, coalesce(content, '')), 'B')`
     ),
     embedding: vector('embedding'),
     embeddingModel: text('embedding_model'),

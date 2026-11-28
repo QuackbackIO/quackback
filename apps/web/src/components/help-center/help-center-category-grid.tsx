@@ -2,7 +2,7 @@ import { Link } from '@tanstack/react-router'
 import { FormattedMessage } from 'react-intl'
 import { getTopLevelCategories } from './help-center-utils'
 import { CategoryIcon } from './category-icon'
-import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
+import { useHelpCenterMainLanguage } from '@/lib/client/hooks/use-help-center-main-language'
 import { hcCollectionPath } from '@/lib/shared/help-center-url'
 
 interface SerializedCategory {
@@ -23,6 +23,7 @@ interface HelpCenterCategoryGridProps {
 }
 
 export function HelpCenterCategoryGrid({ categories, locale }: HelpCenterCategoryGridProps) {
+  const mainLanguage = useHelpCenterMainLanguage()
   const topLevel = getTopLevelCategories(categories)
 
   if (topLevel.length === 0) {
@@ -43,7 +44,7 @@ export function HelpCenterCategoryGrid({ categories, locale }: HelpCenterCategor
           key={cat.id}
           to={
             hcCollectionPath({
-              locale: locale ?? DEFAULT_LOCALE,
+              locale: locale ?? mainLanguage,
               urlId: cat.urlId,
               slug: cat.slug,
             }) as '/hc'
