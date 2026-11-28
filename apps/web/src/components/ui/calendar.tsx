@@ -18,22 +18,29 @@ const LABELS = {
 
 /**
  * Month and weekday names, and the day and button labels screen readers
- * announce, in the page's language. The picker's own defaults are English;
+ * announce, in the page's language. English keeps the picker's own wording;
  * outside an IntlProvider the button labels stay English.
  */
 function useCalendarLanguage(): Pick<CalendarProps, 'formatters' | 'labels'> {
   const locale = usePageLocale()
   const intl = React.useContext(IntlContext)
   return React.useMemo(() => {
+    if (locale.toLowerCase().startsWith('en')) return {}
     const caption = new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' })
-    const weekday = new Intl.DateTimeFormat(locale, { weekday: 'short' })
+    // The weekday column is two letters wide: a language whose short names
+    // run longer (Arabic, Polish) uses the narrow form for every day.
+    const short = new Intl.DateTimeFormat(locale, { weekday: 'short' })
+    const week = Array.from({ length: 7 }, (_, i) => new Date(Date.UTC(2026, 2, 1 + i)))
+    const fits = week.every((date) => short.format(date).length <= 3)
+    const weekdays = fits ? short : new Intl.DateTimeFormat(locale, { weekday: 'narrow' })
+    const weekday = (date: Date) => weekdays.format(date)
     const day = new Intl.DateTimeFormat(locale, { dateStyle: 'full' })
     const label = (message: (typeof LABELS)[keyof typeof LABELS]) =>
       intl ? intl.formatMessage(message) : message.defaultMessage
     return {
       formatters: {
         formatCaption: (month) => caption.format(month),
-        formatWeekdayName: (date) => weekday.format(date),
+        formatWeekdayName: (date) => weekday(date),
       },
       labels: {
         labelPrevious: () => label(LABELS.previous),

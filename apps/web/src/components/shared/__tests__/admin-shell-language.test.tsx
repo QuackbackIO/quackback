@@ -70,6 +70,13 @@ describe('in German', () => {
     expect(screen.getByLabelText('Zum nächsten Monat')).toBeTruthy()
   })
 
+  it("keeps the picker's own English wording on an English page", () => {
+    render(wrap(<Calendar mode="single" defaultMonth={new Date(2026, 2, 1)} />, 'en', {}))
+    expect(screen.getByText('March 2026')).toBeTruthy()
+    expect(screen.getByText('Su')).toBeTruthy()
+    expect(screen.getByLabelText(/next month/i)).toBeTruthy()
+  })
+
   it('names the calendar month in Arabic', () => {
     render(wrap(<Calendar mode="single" defaultMonth={new Date(2026, 2, 1)} />, 'ar', ar))
     expect(screen.getByLabelText('الانتقال إلى الشهر التالي')).toBeTruthy()
