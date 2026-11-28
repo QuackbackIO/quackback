@@ -38,7 +38,7 @@ const hoisted = vi.hoisted(() => ({
   resolvePortalAccessForRequest: vi.fn(),
   isBlocked: vi.fn(),
   getMessengerConfig: vi.fn(),
-  getConversationForVisitor: vi.fn(),
+  getConversationForCustomer: vi.fn(),
   resolveVisitorBlockReply: vi.fn(),
   sendVisitorMessage: vi.fn(),
   assertConversationSendRate: vi.fn(),
@@ -67,7 +67,7 @@ vi.mock('@/lib/server/domains/settings/settings.widget', () => ({
   getMessengerConfig: hoisted.getMessengerConfig,
 }))
 vi.mock('@/lib/server/domains/conversation/conversation.query', () => ({
-  getConversationForVisitor: hoisted.getConversationForVisitor,
+  getConversationForCustomer: hoisted.getConversationForCustomer,
 }))
 vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
   CSAT_CONVERSATION_OPEN: 'CSAT_CONVERSATION_OPEN',
@@ -111,7 +111,7 @@ const baseData = {
 
 describe('sendConversationMessageFn: prevent-replies-when-closed carve-out (SF3)', () => {
   it('rejects an ordinary reply (no blockReply) to a closed conversation when the setting is on', async () => {
-    hoisted.getConversationForVisitor.mockResolvedValue({ conversation: { status: 'closed' } })
+    hoisted.getConversationForCustomer.mockResolvedValue({ conversation: { status: 'closed' } })
     await expect(
       sendConversationMessageFn({ data: { ...baseData, content: 'hi again' } })
     ).rejects.toThrow(/closed/i)
@@ -119,7 +119,7 @@ describe('sendConversationMessageFn: prevent-replies-when-closed carve-out (SF3)
   })
 
   it('rejects a blockReply that does not actually match (resolveVisitorBlockReply returns null) — same as no blockReply', async () => {
-    hoisted.getConversationForVisitor.mockResolvedValue({ conversation: { status: 'closed' } })
+    hoisted.getConversationForCustomer.mockResolvedValue({ conversation: { status: 'closed' } })
     hoisted.resolveVisitorBlockReply.mockResolvedValue(null)
     await expect(
       sendConversationMessageFn({
@@ -137,7 +137,7 @@ describe('sendConversationMessageFn: prevent-replies-when-closed carve-out (SF3)
   })
 
   it('accepts a MATCHED blockReply on a closed conversation instead of rejecting it', async () => {
-    hoisted.getConversationForVisitor.mockResolvedValue({ conversation: { status: 'closed' } })
+    hoisted.getConversationForCustomer.mockResolvedValue({ conversation: { status: 'closed' } })
     hoisted.resolveVisitorBlockReply.mockResolvedValue({
       content: 'Yes please',
       metadata: {
@@ -160,7 +160,7 @@ describe('sendConversationMessageFn: prevent-replies-when-closed carve-out (SF3)
   })
 
   it('never even resolves the blockReply for an OPEN conversation — the gate short-circuits on status first', async () => {
-    hoisted.getConversationForVisitor.mockResolvedValue({ conversation: { status: 'open' } })
+    hoisted.getConversationForCustomer.mockResolvedValue({ conversation: { status: 'open' } })
     await sendConversationMessageFn({
       data: {
         ...baseData,
@@ -177,7 +177,7 @@ describe('sendConversationMessageFn: prevent-replies-when-closed carve-out (SF3)
 
   it('is unaffected when the setting is off: a closed conversation accepts an ordinary reply and reopens through sendVisitorMessage as usual', async () => {
     hoisted.getMessengerConfig.mockResolvedValue({ preventRepliesWhenClosed: false })
-    hoisted.getConversationForVisitor.mockResolvedValue({ conversation: { status: 'closed' } })
+    hoisted.getConversationForCustomer.mockResolvedValue({ conversation: { status: 'closed' } })
     await expect(
       sendConversationMessageFn({ data: { ...baseData, content: 'hi again' } })
     ).resolves.toBeDefined()

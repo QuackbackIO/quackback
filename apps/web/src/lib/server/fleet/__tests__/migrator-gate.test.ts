@@ -399,6 +399,8 @@ describe('replayGateVerdict', () => {
       '0322_session_two_factor_pending',
       '0323_clear_legacy_header_settings',
       '0324_changelog_announce_on_launcher',
+      '0325_ticket_due_dates',
+      '0326_ticket_sharing',
     ])
     const verdict = replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)
     expect(verdict.ok).toBe(false)

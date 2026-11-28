@@ -6,6 +6,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
 import type { ComponentProps } from 'react'
@@ -25,6 +26,7 @@ vi.mock('@/lib/client/hooks/use-activation-action', () => ({
 }))
 
 const { ConversationListColumn } = await import('../conversation-list-column')
+const { ConversationListToolbar } = await import('../conversation-list-toolbar')
 
 const noop = () => {}
 const PROPS: ComponentProps<typeof ConversationListColumn> = {
@@ -136,5 +138,77 @@ describe('ConversationListColumn toolbar', () => {
   it('counts active filters on the Filter button', () => {
     renderColumn({ priorityFilter: 'high' })
     expect(screen.getByRole('button', { name: /Filter/ }).textContent).toContain('1')
+  })
+})
+
+describe('ConversationListToolbar due date', () => {
+  const TOOLBAR: ComponentProps<typeof ConversationListToolbar> = {
+    searching: false,
+    showRefinements: true,
+    facet: 'open',
+    onFacet: noop,
+    priorityFilter: 'all',
+    onPriorityFilter: noop,
+    sort: 'recent',
+    onSort: noop,
+  }
+
+  function renderToolbar(props: Partial<ComponentProps<typeof ConversationListToolbar>> = {}) {
+    return render(
+      <IntlProvider locale="en">
+        <ConversationListToolbar {...TOOLBAR} {...props} />
+      </IntlProvider>
+    )
+  }
+
+  it('shows a removable Due date chip and counts it on the Filter button', () => {
+    const onDueFilter = vi.fn()
+    renderToolbar({ dueFilter: 'overdue', onDueFilter })
+    expect(screen.getByText('Overdue')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Filter/ }).textContent).toContain('1')
+    fireEvent.click(screen.getByRole('button', { name: /Remove Due date Overdue filter/ }))
+    expect(onDueFilter).toHaveBeenCalledWith(undefined)
+  })
+
+  it('labels the due soon chip in plain words', () => {
+    renderToolbar({ dueFilter: 'due_soon', onDueFilter: noop })
+    expect(screen.getByText('Due in the next 24 hours')).toBeTruthy()
+  })
+
+  it('shows no due chip where tickets do not apply', () => {
+    renderToolbar({ dueFilter: 'overdue' })
+    expect(screen.queryByText('Overdue')).toBeNull()
+    expect(screen.getByRole('button', { name: /Filter/ }).textContent).not.toContain('1')
+  })
+
+  it('offers the Due date sort only where tickets apply', async () => {
+    const user = userEvent.setup()
+    renderToolbar({ onDueFilter: noop })
+    await user.click(screen.getByRole('button', { name: /Sort: Most recent/ }))
+    expect(await screen.findByRole('menuitemradio', { name: 'Due date' })).toBeTruthy()
+    cleanup()
+
+    renderToolbar()
+    await user.click(screen.getByRole('button', { name: /Sort: Most recent/ }))
+    await screen.findByRole('menuitemradio', { name: 'Most recent' })
+    expect(screen.queryByRole('menuitemradio', { name: 'Due date' })).toBeNull()
+  })
+
+  it('keeps a pinned Due date sort visible even where the filter is not offered', () => {
+    renderToolbar({ sort: 'due' })
+    expect(screen.getByRole('button', { name: /Sort: Due date/ })).toBeTruthy()
+  })
+
+  it('lists the due options in the Filter menu', async () => {
+    const user = userEvent.setup()
+    const onDueFilter = vi.fn()
+    renderToolbar({ onDueFilter })
+    await user.click(screen.getByRole('button', { name: /Filter/ }))
+    // Open the Due date submenu from the keyboard (hover-driven in a browser).
+    const trigger = await screen.findByRole('menuitem', { name: 'Due date' })
+    trigger.focus()
+    await user.keyboard('{ArrowRight}')
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Due in the next 24 hours' }))
+    expect(onDueFilter).toHaveBeenCalledWith('due_soon')
   })
 })
