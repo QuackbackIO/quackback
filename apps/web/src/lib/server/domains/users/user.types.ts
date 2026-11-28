@@ -226,6 +226,11 @@ export interface IdentifyPortalUserInput {
   /** Customer-provided external user ID (e.g. from your own system) */
   externalId?: string | null
   attributes?: Record<string, unknown>
+  /**
+   * The language the person uses in your app (a BCP-47 tag), recorded as
+   * their detected language when Quackback has it. Never their chosen one.
+   */
+  language?: string
 }
 
 /**
@@ -241,6 +246,7 @@ export interface IdentifyPortalUserResult {
   externalId: string | null
   attributes: Record<string, unknown>
   createdAt: Date
+  language: PersonLanguage
   /** true if a new user was created, false if an existing user was updated */
   created: boolean
   /**
@@ -277,4 +283,5 @@ export interface UpdatePortalUserResult {
   externalId: string | null
   attributes: Record<string, unknown>
   createdAt: Date
+  language: PersonLanguage
 }

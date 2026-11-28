@@ -5,6 +5,7 @@ import 'zod-openapi'
 import { z } from 'zod'
 import { registerPath, TypeIdSchema, createItemResponseSchema, asSchema } from '../openapi'
 import {
+  PersonLanguageSchema,
   TimestampSchema,
   UnauthorizedErrorSchema,
   NotFoundErrorSchema,
@@ -29,6 +30,7 @@ const PortalUserListItemSchema = z.object({
   postCount: z.number().meta({ description: 'Number of posts created' }),
   commentCount: z.number().meta({ description: 'Number of comments made' }),
   voteCount: z.number().meta({ description: 'Number of votes cast' }),
+  language: PersonLanguageSchema,
 })
 
 // Engaged post schema (for user detail)
@@ -66,6 +68,7 @@ const IdentifyUserResponseSchema = z.object({
   externalId: z.string().nullable().meta({ description: 'Customer-provided external user ID' }),
   attributes: UserAttributesSchema,
   createdAt: TimestampSchema.meta({ description: 'Account creation date' }),
+  language: PersonLanguageSchema,
   created: z
     .boolean()
     .meta({ description: 'true if new user was created, false if existing was updated' }),
@@ -199,6 +202,11 @@ registerPath('/users/identify', {
                 .optional()
                 .meta({ description: "Your system's user ID for cross-referencing" }),
               attributes: UserAttributesSchema.optional(),
+              language: z.string().optional().meta({
+                description:
+                  "The person's language in your app, as a BCP-47 tag (for example de-DE). Recorded as their detected language when Quackback has that language, and used for emails while the person has not chosen one; any other tag is ignored. It never sets the language the person chose.",
+                example: 'de-DE',
+              }),
             })
           ),
         },

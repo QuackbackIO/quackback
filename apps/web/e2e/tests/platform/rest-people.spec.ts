@@ -51,6 +51,7 @@ const USER_KEYS = [
   'emailVerified',
   'image',
   'joinedAt',
+  'language',
   'name',
   'postCount',
   'principalId',
@@ -64,11 +65,12 @@ const PROFILE_KEYS = [
   'emailVerified',
   'externalId',
   'image',
+  'language',
   'name',
   'principalId',
   'userId',
 ]
-const MEMBER_KEYS = ['createdAt', 'email', 'id', 'image', 'name', 'role', 'userId']
+const MEMBER_KEYS = ['createdAt', 'email', 'id', 'image', 'language', 'name', 'role', 'userId']
 const COMPANY_KEYS = [
   'createdAt',
   'customAttributes',
@@ -350,6 +352,19 @@ test.describe('REST portal users', () => {
       const [row] = await supportDb()`SELECT display_name FROM principal
                                       WHERE id = ${toUuid(created.principalId)}`
       expect(row.display_name).toBe(`Second ${marker}`)
+
+      // The caller's language for the person is their detected language only.
+      const withLanguage = await identify(
+        admin.api,
+        mixed,
+        { language: 'de-DE', preferredLanguage: 'fr' },
+        200
+      )
+      expect(withLanguage.language).toEqual({ chosen: null, detected: 'de' })
+      const listed = (
+        await expectJson(await admin.api.get(`/api/v1/users/${created.principalId}`), 200)
+      ).data
+      expect(listed.language).toEqual({ chosen: null, detected: 'de' })
 
       const nameless = await identify(admin.api, `${marker}-nameless@customers.example`)
       expect(nameless.name).toBe(`${marker}-nameless`)

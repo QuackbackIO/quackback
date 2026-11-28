@@ -23,6 +23,8 @@ export const USER_COLUMNS = {
   emailVerified: true,
   metadata: true,
   createdAt: true,
+  preferredLanguage: true,
+  detectedLocale: true,
 } as const
 
 // ============================================

@@ -60,6 +60,7 @@ export const Route = createFileRoute('/api/v1/users/$principalId')({
             postCount: user.postCount,
             commentCount: user.commentCount,
             voteCount: user.voteCount,
+            language: user.language,
             engagedPosts: user.engagedPosts.map((post) => ({
               id: post.id,
               title: post.title,
@@ -120,6 +121,7 @@ export const Route = createFileRoute('/api/v1/users/$principalId')({
             externalId: result.externalId,
             attributes: result.attributes,
             createdAt: result.createdAt.toISOString(),
+            language: result.language,
           })
         } catch (error) {
           return handleDomainError(error)

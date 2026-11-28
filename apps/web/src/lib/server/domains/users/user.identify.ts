@@ -15,6 +15,7 @@ import {
 } from '@/lib/server/domains/principals/principal.factory'
 import { NotFoundError } from '@/lib/shared/errors'
 import { isUniqueViolation } from '@/lib/server/utils'
+import { normalizeLocale } from '@/lib/shared/i18n'
 import type {
   IdentifyPortalUserInput,
   IdentifyPortalUserResult,
@@ -45,6 +46,9 @@ export async function identifyPortalUser(
   const defaultName = input.name || normalizedEmail.split('@')[0]
 
   const { validAttrs, attrRemovals } = await validateInputAttributes(input.attributes)
+  // The language the caller's app uses for this person, when Quackback has
+  // it; any other tag records nothing. It is only ever the detected language.
+  const detectedLocale = input.language ? normalizeLocale(input.language) : null
 
   // Set when this call vouches for the email: created verified, or an
   // existing user flipped false -> true. Surfaced so the caller can audit
@@ -60,8 +64,13 @@ export async function identifyPortalUser(
     emailVerified: boolean
     metadata: string | null
     createdAt: Date
+    detectedLocale: string | null
   }) {
     const userUpdates: Record<string, unknown> = {}
+    if (detectedLocale && detectedLocale !== record.detectedLocale) {
+      userUpdates.detectedLocale = detectedLocale
+      userUpdates.detectedLocaleAt = new Date()
+    }
     if (input.name !== undefined && input.name !== record.name) userUpdates.name = input.name
     if (input.image !== undefined && input.image !== record.image) userUpdates.image = input.image
     if (input.emailVerified !== undefined && input.emailVerified !== record.emailVerified) {
@@ -132,6 +141,8 @@ export async function identifyPortalUser(
             emailVerified: input.emailVerified ?? false,
             image: input.image ?? null,
             metadata,
+            detectedLocale,
+            detectedLocaleAt: detectedLocale ? new Date() : null,
             createdAt: new Date(),
             updatedAt: new Date(),
           })
@@ -195,6 +206,7 @@ export async function identifyPortalUser(
     externalId: extractExternalId(userRecord.metadata ?? null),
     attributes: parseUserAttributes(userRecord.metadata ?? null),
     createdAt: userRecord.createdAt,
+    language: { chosen: userRecord.preferredLanguage, detected: userRecord.detectedLocale },
     created,
     emailVerifiedAsserted,
   }
@@ -287,5 +299,6 @@ export async function updatePortalUser(
     externalId: extractExternalId(updated.metadata ?? null),
     attributes: parseUserAttributes(updated.metadata ?? null),
     createdAt: updated.createdAt,
+    language: { chosen: updated.preferredLanguage, detected: updated.detectedLocale },
   }
 }

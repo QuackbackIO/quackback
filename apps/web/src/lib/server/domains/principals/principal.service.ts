@@ -133,6 +133,8 @@ export async function listTeamMembers(): Promise<TeamMember[]> {
         role: principal.role,
         createdAt: principal.createdAt,
         lastSignInAt: sql<Date | string | null>`${lastSession.lastSignInAt}`,
+        preferredLanguage: user.preferredLanguage,
+        detectedLocale: user.detectedLocale,
       })
       .from(principal)
       .innerJoin(user, eq(principal.userId, user.id))
@@ -144,16 +146,14 @@ export async function listTeamMembers(): Promise<TeamMember[]> {
     // normalise to Date for the TeamMember type. Different shape from
     // the server-fn boundary (which wants string), so we use a Date
     // constructor directly rather than going through toIsoStringOrNull.
-    return rawMembers.map((m) => ({
-      id: m.id,
-      userId: m.userId,
-      name: m.name,
-      email: m.email,
-      image: resolveUserAvatarUrl({ userImage: m.image, userImageKey: m.imageKey }),
-      role: m.role,
-      createdAt: m.createdAt,
-      lastSignInAt: m.lastSignInAt == null ? null : new Date(m.lastSignInAt),
-    }))
+    return rawMembers.map(
+      ({ image, imageKey, lastSignInAt, preferredLanguage, detectedLocale, ...m }) => ({
+        ...m,
+        image: resolveUserAvatarUrl({ userImage: image, userImageKey: imageKey }),
+        lastSignInAt: lastSignInAt == null ? null : new Date(lastSignInAt),
+        language: { chosen: preferredLanguage, detected: detectedLocale },
+      })
+    )
   } catch (error) {
     log.error({ err: error }, 'failed to list team members')
     throw new InternalError('DATABASE_ERROR', 'Failed to list team members', error)

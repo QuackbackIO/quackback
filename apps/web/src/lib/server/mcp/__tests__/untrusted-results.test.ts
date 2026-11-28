@@ -59,6 +59,9 @@ vi.mock('@/lib/server/domains/changelog/changelog.service', () => ({
   getChangelogById: mocks.getChangelogById,
   createChangelog: mocks.createChangelog,
 }))
+vi.mock('@/lib/server/domains/users/person-language', () => ({
+  readPersonLanguage: async () => ({ chosen: null, detected: 'de' }),
+}))
 vi.mock('@/lib/server/domains/conversation/conversation.query', () => ({
   listConversationsForAgent: mocks.listConversationsForAgent,
   conversationToDTO: mocks.conversationToDTO,
@@ -754,6 +757,7 @@ describe('author names of teammates who have left the team', () => {
         subject: null,
         visitorPrincipalId: 'principal_ada',
         visitorEmail: null,
+        visitorLanguage: { chosen: null, detected: 'de' },
         assignedAgentPrincipalId: null,
         lastMessageAt: ISO2,
         resolvedAt: null,
@@ -1073,6 +1077,7 @@ describe('get_conversation', () => {
           subject: 'Re: refund',
           visitorPrincipalId: 'principal_ada',
           visitorEmail: 'ada@acme.com',
+          visitorLanguage: { chosen: null, detected: 'de' },
           assignedAgentPrincipalId: 'principal_jane',
           lastMessageAt: ISO2,
           resolvedAt: null,
