@@ -1,4 +1,6 @@
 import { Body, Head, Html, Link, Preview, Text } from '@react-email/components'
+import { ENGLISH_EMAIL, type EmailLocale } from '../i18n'
+import { CONVERSATION_MESSAGES as M } from '../conversation-copy'
 
 /**
  * Human correspondence for the email channel: the agent's words are the body.
@@ -20,6 +22,7 @@ export interface ConversationReplyEmailProps {
     name: string
     text: string
   }
+  i18n?: EmailLocale
 }
 
 const page: React.CSSProperties = {
@@ -79,10 +82,10 @@ const quote: React.CSSProperties = {
   margin: '0',
 }
 
-function formatQuoteDate(value: Date | string): string {
+function formatQuoteDate(value: Date | string, lang: string): string {
   const date = value instanceof Date ? value : new Date(value)
   if (Number.isNaN(date.getTime())) return ''
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return date.toLocaleDateString(lang === 'en' ? 'en-US' : lang, { month: 'short', day: 'numeric' })
 }
 
 function quoteExcerpt(text: string): string {
@@ -98,12 +101,14 @@ export function ConversationReplyEmail({
   teamName,
   viewUrl,
   quotedPrevious,
+  i18n = ENGLISH_EMAIL,
 }: ConversationReplyEmailProps) {
+  const { t } = i18n
   const preview = messagePreview.slice(0, 140)
-  const quoteDate = quotedPrevious ? formatQuoteDate(quotedPrevious.date) : ''
+  const quoteDate = quotedPrevious ? formatQuoteDate(quotedPrevious.date, i18n.lang) : ''
 
   return (
-    <Html>
+    <Html lang={i18n.lang} dir={i18n.dir}>
       <Head />
       <Preview>{preview}</Preview>
       <Body style={page}>
@@ -119,12 +124,12 @@ export function ConversationReplyEmail({
         <hr style={rule} />
 
         <Text style={footer}>
-          Reply to this email to continue the conversation
+          {t(M.continueByReply)}
           {viewUrl ? (
             <>
               {' · '}
               <Link href={viewUrl} style={footerLink}>
-                View it online
+                {t(M.viewOnline)}
               </Link>
             </>
           ) : null}
@@ -132,9 +137,9 @@ export function ConversationReplyEmail({
 
         {quotedPrevious ? (
           <Text style={quote}>
-            On {quoteDate}
-            {quoteDate ? ', ' : ''}
-            {quotedPrevious.name} wrote:
+            {quoteDate
+              ? t(M.quoteWithDate, { date: quoteDate, name: quotedPrevious.name })
+              : t(M.quote, { name: quotedPrevious.name })}
             <br />
             {quoteExcerpt(quotedPrevious.text)}
           </Text>

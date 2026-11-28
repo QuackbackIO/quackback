@@ -185,6 +185,7 @@ describe('emailHook', () => {
 
       expect(result).toEqual({ success: true })
       expect(mockStatusChangeEmail).toHaveBeenCalledWith({
+        i18n: expect.objectContaining({ lang: 'en' }),
         to: 'user@example.com',
         postTitle: 'Test Post',
         postUrl: 'https://example.com/post/1',
@@ -213,6 +214,7 @@ describe('emailHook', () => {
 
       expect(result).toEqual({ success: true })
       expect(mockNewCommentEmail).toHaveBeenCalledWith({
+        i18n: expect.objectContaining({ lang: 'en' }),
         to: 'user@example.com',
         postTitle: 'Test Post',
         postUrl: 'https://example.com/post/1',

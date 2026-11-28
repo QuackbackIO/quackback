@@ -6,6 +6,75 @@
  */
 
 import { singleLineSubject } from './subject'
+import { ENGLISH_EMAIL, defineEmailMessages, type EmailLocale } from './i18n'
+
+export const CONVERSATION_MESSAGES = defineEmailMessages({
+  newMessage: { id: 'email.conversation.newMessage', defaultMessage: 'New message' },
+  started: {
+    id: 'email.conversation.started',
+    defaultMessage: '{name} started a conversation in {workspace}.',
+  },
+  sent: {
+    id: 'email.conversation.sent',
+    defaultMessage: '{name} sent a new message in {workspace}.',
+  },
+  openInbox: { id: 'email.conversation.openInbox', defaultMessage: 'Open inbox' },
+  memberReason: {
+    id: 'email.conversation.memberReason',
+    defaultMessage: 'You received this email because you are a member of this workspace.',
+  },
+  replyFrom: { id: 'email.conversation.replyFrom', defaultMessage: 'New reply from {workspace}' },
+  messageFrom: {
+    id: 'email.conversation.messageFrom',
+    defaultMessage: 'New message from {workspace}',
+  },
+  teamReplied: {
+    id: 'email.conversation.teamReplied',
+    defaultMessage: '{name} replied to your conversation.',
+  },
+  teamSent: { id: 'email.conversation.teamSent', defaultMessage: '{name} sent you a message.' },
+  personReplied: {
+    id: 'email.conversation.personReplied',
+    defaultMessage: '{name} replied to your conversation with {workspace}.',
+  },
+  personSent: {
+    id: 'email.conversation.personSent',
+    defaultMessage: '{name} from {workspace} sent you a message.',
+  },
+  viewConversation: { id: 'email.conversation.view', defaultMessage: 'View conversation' },
+  replyReason: {
+    id: 'email.conversation.replyReason',
+    defaultMessage: 'You received this email because you have an open conversation with this team.',
+  },
+  messageReason: {
+    id: 'email.conversation.messageReason',
+    defaultMessage: 'You received this email because {workspace} sent you a message.',
+  },
+  agentFrom: { id: 'email.conversation.agentFrom', defaultMessage: '{name} from {workspace}' },
+  continueByReply: {
+    id: 'email.conversation.continueByReply',
+    defaultMessage: 'Reply to this email to continue the conversation',
+  },
+  viewOnline: { id: 'email.csat.viewOnline', defaultMessage: 'View it online' },
+  quoteWithDate: {
+    id: 'email.conversation.quoteWithDate',
+    defaultMessage: 'On {date}, {name} wrote:',
+  },
+  quote: { id: 'email.conversation.quote', defaultMessage: '{name} wrote:' },
+  closedSubject: {
+    id: 'email.conversation.closedSubject',
+    defaultMessage: 'Re: your conversation with {workspace}',
+  },
+  ackSubject: {
+    id: 'email.conversation.ackSubject',
+    defaultMessage: 'Re: your message to {workspace}',
+  },
+  ackBody: {
+    id: 'email.conversation.ackBody',
+    defaultMessage: 'We received your email and will get back to you shortly.',
+  },
+})
+const M = CONVERSATION_MESSAGES
 
 export type ConversationMailDirection = 'agent_reply' | 'visitor_message' | 'agent_started'
 
@@ -36,7 +105,8 @@ export function isHumanReplyTemplate(
 export function teamAlertSubject(
   visitorName: string,
   subject: string | null | undefined,
-  preview?: string | null
+  preview?: string | null,
+  i18n: EmailLocale = ENGLISH_EMAIL
 ): string {
   const topic =
     (subject &&
@@ -44,13 +114,17 @@ export function teamAlertSubject(
         .replace(/^\s*(re:\s*)+/i, '')
         .trim()) ||
     preview?.replace(/\s+/g, ' ').trim().slice(0, 80) ||
-    'New message'
+    i18n.t(M.newMessage)
   return `${visitorName}: ${topic}`
 }
 
 /** The From display name on an agent's reply: `Alex from Acme`. */
-export function agentReplyDisplayName(agentName: string, workspaceName: string): string {
-  return `${agentName} from ${workspaceName}`
+export function agentReplyDisplayName(
+  agentName: string,
+  workspaceName: string,
+  i18n: EmailLocale = ENGLISH_EMAIL
+): string {
+  return i18n.t(M.agentFrom, { name: agentName, workspace: workspaceName })
 }
 
 export function conversationMessageCopy(opts: {
@@ -67,6 +141,7 @@ export function conversationMessageCopy(opts: {
   isFirstMessage?: boolean
   /** When set, overrides the channel string for the human-template gate. */
   correspondence?: boolean
+  i18n?: EmailLocale
 }): {
   subject: string
   heading: string
@@ -76,40 +151,39 @@ export function conversationMessageCopy(opts: {
   useHumanTemplate: boolean
 } {
   const { direction, senderName, workspaceName } = opts
+  const { t } = opts.i18n ?? ENGLISH_EMAIL
   const useHumanTemplate = isHumanReplyTemplate(opts.channel, direction, opts.correspondence)
   const forwarded = conversationReplySubject(opts.conversationSubject)
+  const words = { name: senderName, workspace: workspaceName }
 
   if (direction === 'visitor_message') {
-    const intro =
-      opts.isFirstMessage === true
-        ? `${senderName} started a conversation in ${workspaceName}.`
-        : `${senderName} sent a new message in ${workspaceName}.`
     return {
-      subject: teamAlertSubject(senderName, opts.conversationSubject, opts.preview),
-      heading: 'New message',
-      intro,
-      ctaLabel: 'Open inbox',
-      reason: 'You received this email because you are a member of this workspace.',
+      subject: teamAlertSubject(senderName, opts.conversationSubject, opts.preview, opts.i18n),
+      heading: t(M.newMessage),
+      intro: t(opts.isFirstMessage === true ? M.started : M.sent, words),
+      ctaLabel: t(M.openInbox),
+      reason: t(M.memberReason),
       useHumanTemplate: false,
     }
   }
 
   const isReply = direction === 'agent_reply'
-  const generic = isReply ? `New reply from ${workspaceName}` : `New message from ${workspaceName}`
+  const generic = t(isReply ? M.replyFrom : M.messageFrom, words)
   return {
     subject: forwarded ?? generic,
     heading: forwarded ?? generic,
-    intro: opts.senderIsTeam
-      ? isReply
-        ? `${senderName} replied to your conversation.`
-        : `${senderName} sent you a message.`
-      : isReply
-        ? `${senderName} replied to your conversation with ${workspaceName}.`
-        : `${senderName} from ${workspaceName} sent you a message.`,
-    ctaLabel: 'View conversation',
-    reason: isReply
-      ? 'You received this email because you have an open conversation with this team.'
-      : `You received this email because ${workspaceName} sent you a message.`,
+    intro: t(
+      opts.senderIsTeam
+        ? isReply
+          ? M.teamReplied
+          : M.teamSent
+        : isReply
+          ? M.personReplied
+          : M.personSent,
+      words
+    ),
+    ctaLabel: t(M.viewConversation),
+    reason: t(isReply ? M.replyReason : M.messageReason, words),
     useHumanTemplate,
   }
 }

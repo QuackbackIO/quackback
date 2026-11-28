@@ -1,5 +1,6 @@
 import { Button, Heading, Section, Text } from '@react-email/components'
-import { EmailLayout, NotificationFooter } from './email-layout'
+import { EmailLayout, NotificationFooter, LAYOUT_MESSAGES } from './email-layout'
+import { ENGLISH_EMAIL, type EmailLocale } from '../i18n'
 import { typography, button, colors } from './shared-styles'
 
 interface TicketEventEmailProps {
@@ -25,6 +26,7 @@ interface TicketEventEmailProps {
   reason: string
   preferencesUrl?: string
   logoUrl?: string
+  i18n?: EmailLocale
 }
 
 /**
@@ -46,6 +48,7 @@ export function TicketEventEmail({
   reason,
   preferencesUrl,
   logoUrl,
+  i18n = ENGLISH_EMAIL,
 }: TicketEventEmailProps) {
   const paragraphs = messageBody
     ? messageBody
@@ -55,7 +58,7 @@ export function TicketEventEmail({
     : []
 
   return (
-    <EmailLayout preview={heading} logoUrl={logoUrl} logoAlt={organizationName}>
+    <EmailLayout preview={heading} logoUrl={logoUrl} logoAlt={organizationName} i18n={i18n}>
       <Heading style={typography.h1}>{heading}</Heading>
       <Text style={typography.text}>{intro}</Text>
 
@@ -128,7 +131,8 @@ export function TicketEventEmail({
       <NotificationFooter
         reason={reason}
         unsubscribeUrl={preferencesUrl ?? ctaUrl}
-        unsubscribeLabel="Manage notification preferences"
+        unsubscribeLabel={i18n.t(LAYOUT_MESSAGES.preferences)}
+        i18n={i18n}
       />
     </EmailLayout>
   )

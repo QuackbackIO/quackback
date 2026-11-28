@@ -176,8 +176,12 @@ async function sendOnePortalInvite({
   const logoUrl = getEmailSafeUrl(auth.settings.logoKey) ?? undefined
   // Sealed class: no account exists for the invitee.
   const { sealedRecipient } = await import('@/lib/server/email/recipient')
+  // The invitee has no account yet and the request is the inviter's, so the
+  // invitation is in the language visitors get: never the inviter's browser.
+  const { recipientEmailLocale } = await import('@/lib/server/email/email-locale')
   await sendPortalInviteEmail({
     to: sealedRecipient(minted),
+    i18n: await recipientEmailLocale({ email }),
     workspaceName: auth.settings.name,
     inviteLink,
     logoUrl,
@@ -434,8 +438,11 @@ export const resendPortalInviteFn = createServerFn({ method: 'POST' })
     let result: Awaited<ReturnType<typeof sendPortalInviteEmail>>
     try {
       const { sealedRecipient } = await import('@/lib/server/email/recipient')
+      // The same language as the first invitation, never the inviter's browser.
+      const { recipientEmailLocale } = await import('@/lib/server/email/email-locale')
       result = await sendPortalInviteEmail({
         to: sealedRecipient(minted),
+        i18n: await recipientEmailLocale({ email: inv.email }),
         workspaceName: auth.settings.name,
         inviteLink,
         logoUrl,

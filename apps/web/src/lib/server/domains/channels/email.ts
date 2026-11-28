@@ -32,8 +32,10 @@ export const emailAdapter: ChannelAdapter = {
     const envelope = await conversationEnvelope(ctx.conversationId, ctx.workspaceName)
 
     const { sendCsatRequestEmail } = await import('@quackback/email')
+    const { recipientEmailLocale } = await import('@/lib/server/email/email-locale')
     const result = await sendCsatRequestEmail({
       to: ctx.recipient,
+      i18n: await recipientEmailLocale({ principalId: ctx.visitorPrincipalId }),
       promptText: ctx.promptText,
       ratingUrls: ctx.ratingUrls,
       workspaceName: ctx.workspaceName,

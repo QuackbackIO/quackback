@@ -13,6 +13,16 @@ const hoisted = vi.hoisted(() => ({
   mockCreateVerificationOTP: vi.fn(async () => '123456'),
   mockSendMagicLinkEmail: vi.fn(async () => undefined),
   settings: null as null | { name: string; logoKey: string | null },
+  recipientEmailLocale: vi.fn(async () => ({ lang: 'fr', dir: 'ltr' as const, t: () => '' })),
+}))
+
+// The browser of the sign-in request, read for the email's language.
+vi.mock('@tanstack/react-start/server', () => ({
+  getRequestHeaders: () => new Headers({ 'accept-language': 'fr-FR,fr;q=0.9' }),
+}))
+vi.mock('@/lib/server/email/email-locale', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/email/email-locale')>()),
+  recipientEmailLocale: hoisted.recipientEmailLocale,
 }))
 
 vi.mock('../magic-link-mint', () => ({ mintMagicLinkUrl: hoisted.mockMintMagicLinkUrl }))
@@ -110,6 +120,21 @@ describe('requestEmailSignin — failed-verify redirect', () => {
     await requestEmailSignin({ email: 'user@example.com', callbackURL: '/p/posts' })
     expect(hoisted.mockMintMagicLinkUrl).toHaveBeenCalledWith(
       expect.objectContaining({ errorCallbackPath: '/auth/login' })
+    )
+  })
+})
+
+describe("requestEmailSignin: the email's language", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it("passes the address and the sign-in request's browser language", async () => {
+    await requestEmailSignin({ email: 'jess@example.com', callbackURL: '/' })
+    expect(hoisted.recipientEmailLocale).toHaveBeenCalledWith(
+      { email: 'jess@example.com' },
+      { acceptLanguage: 'fr-FR,fr;q=0.9' }
+    )
+    expect(hoisted.mockSendMagicLinkEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ i18n: expect.objectContaining({ lang: 'fr' }) })
     )
   })
 })

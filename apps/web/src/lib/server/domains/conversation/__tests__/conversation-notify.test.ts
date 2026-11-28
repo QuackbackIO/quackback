@@ -851,6 +851,7 @@ describe('notifyCsatRequestEmail', () => {
 
     expect(mintCsatEmailToken).toHaveBeenCalledWith(conversationId, visitorPrincipalId)
     expect(sendCsatRequestEmail).toHaveBeenCalledWith({
+      i18n: expect.objectContaining({ lang: 'en' }),
       to: 'visitor@example.com',
       promptText: 'How did we do?',
       ratingUrls: [

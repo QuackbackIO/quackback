@@ -1,6 +1,37 @@
 import { Button, Heading, Section, Text } from '@react-email/components'
 import { EmailLayout, NotificationFooter, feedbackFooterReason } from './email-layout'
 import { typography, button, colors } from './shared-styles'
+import { ENGLISH_EMAIL, defineEmailMessages, type EmailLocale } from '../i18n'
+
+export const STATUS_CHANGE_MESSAGES = defineEmailMessages({
+  headlineAuthor: {
+    id: 'email.statusChange.headlineAuthor',
+    defaultMessage: 'Your feedback is now {status}!',
+  },
+  headlineFollower: {
+    id: 'email.statusChange.headlineFollower',
+    defaultMessage: 'A post you follow is now {status}',
+  },
+  bodyAuthor: {
+    id: 'email.statusChange.bodyAuthor',
+    defaultMessage: 'Great news! The status of your feedback has been updated on {workspace}.',
+  },
+  bodyFollower: {
+    id: 'email.statusChange.bodyFollower',
+    defaultMessage: 'The status of a post you follow has been updated on {workspace}.',
+  },
+  cta: { id: 'email.statusChange.cta', defaultMessage: 'View feedback' },
+})
+const M = STATUS_CHANGE_MESSAGES
+
+/** The heading, which is also the subject line; the status name stays as the team wrote it. */
+export function statusChangeHeadline(
+  status: string,
+  isPostAuthor: boolean,
+  i18n: EmailLocale = ENGLISH_EMAIL
+): string {
+  return i18n.t(isPostAuthor ? M.headlineAuthor : M.headlineFollower, { status })
+}
 
 interface StatusChangeEmailProps {
   postTitle: string
@@ -13,6 +44,7 @@ interface StatusChangeEmailProps {
   logoUrl?: string
   /** The reader wrote the post. Everyone else follows it (voted, commented or subscribed). */
   isPostAuthor?: boolean
+  i18n?: EmailLocale
 }
 
 function getStatusEmoji(status: string): string {
@@ -44,22 +76,25 @@ export function StatusChangeEmail({
   preferencesUrl,
   logoUrl,
   isPostAuthor = false,
+  i18n = ENGLISH_EMAIL,
 }: StatusChangeEmailProps) {
+  const { t } = i18n
   const emoji = getStatusEmoji(newStatus)
   const formattedNewStatus = capitalizeStatus(newStatus)
   const formattedPreviousStatus = capitalizeStatus(previousStatus)
-  const headline = isPostAuthor
-    ? `Your feedback is now ${formattedNewStatus}!`
-    : `A post you follow is now ${formattedNewStatus}`
+  const headline = statusChangeHeadline(formattedNewStatus, isPostAuthor, i18n)
 
   return (
-    <EmailLayout preview={`${emoji} ${headline}`} logoUrl={logoUrl} logoAlt={organizationName}>
+    <EmailLayout
+      preview={`${emoji} ${headline}`}
+      logoUrl={logoUrl}
+      logoAlt={organizationName}
+      i18n={i18n}
+    >
       {/* Content */}
       <Heading style={typography.h1}>{`${emoji} ${headline}`}</Heading>
       <Text style={typography.text}>
-        {isPostAuthor
-          ? `Great news! The status of your feedback has been updated on ${organizationName}.`
-          : `The status of a post you follow has been updated on ${organizationName}.`}
+        {t(isPostAuthor ? M.bodyAuthor : M.bodyFollower, { workspace: organizationName })}
       </Text>
 
       {/* Post Title */}
@@ -86,15 +121,16 @@ export function StatusChangeEmail({
       {/* CTA Button */}
       <Section style={{ textAlign: 'center', marginTop: '32px', marginBottom: '32px' }}>
         <Button style={button.primary} href={postUrl}>
-          View Feedback
+          {t(M.cta)}
         </Button>
       </Section>
 
       {/* Footer */}
       <NotificationFooter
-        reason={feedbackFooterReason(isPostAuthor)}
+        reason={feedbackFooterReason(isPostAuthor, i18n)}
         unsubscribeUrl={unsubscribeUrl}
         preferencesUrl={preferencesUrl}
+        i18n={i18n}
       />
     </EmailLayout>
   )

@@ -16,6 +16,7 @@ import nodemailer from 'nodemailer'
 import type { Transporter } from 'nodemailer'
 import { Resend } from 'resend'
 import { createLogger } from '@quackback/logger'
+import { ENGLISH_EMAIL, defineEmailMessages, type EmailLocale } from './i18n'
 import { isSyntheticAnonEmail } from './anon'
 import { namedAddress } from './named-address'
 import {
@@ -52,17 +53,21 @@ export type { AccountEmail, SealedEmail, ContactEmail, SecureRecipient } from '.
 // which workspace is speaking, and the compiler is what checks it was earned.
 import type { SendingIdentity } from './sender'
 export type { SendingIdentity } from './sender'
-import { MagicLinkEmail } from './templates/magic-link'
-import { SignupNotAllowedEmail } from './templates/signup-not-allowed'
+import { MagicLinkEmail, MAGIC_LINK_MESSAGES } from './templates/magic-link'
+import { SignupNotAllowedEmail, SIGNUP_NOT_ALLOWED_MESSAGES } from './templates/signup-not-allowed'
 import { InvitationEmail, type InvitationEmailCopy } from './templates/invitation'
-import { PortalInviteEmail } from './templates/portal-invite'
+import { PortalInviteEmail, PORTAL_INVITE_MESSAGES } from './templates/portal-invite'
 import { MessengerInstallEmail } from './templates/messenger-install'
 import { OnboardingEmail, type OnboardingEmailContent } from './templates/onboarding-email'
-import { StatusChangeEmail } from './templates/status-change'
-import { NewCommentEmail } from './templates/new-comment'
+import { StatusChangeEmail, statusChangeHeadline } from './templates/status-change'
+import { NewCommentEmail, NEW_COMMENT_MESSAGES } from './templates/new-comment'
 import { ConversationMessageEmail } from './templates/conversation-message'
 import { ConversationReplyEmail } from './templates/conversation-reply'
-import { conversationMessageCopy, conversationReplySubject } from './conversation-copy'
+import {
+  CONVERSATION_MESSAGES,
+  conversationMessageCopy,
+  conversationReplySubject,
+} from './conversation-copy'
 import { singleLineSubject } from './subject'
 import { ConversationClosedEmail } from './templates/conversation-closed'
 import { isEmailBillable } from './mail-class'
@@ -76,8 +81,11 @@ import {
 export type { ModerationDecision, ModeratedItem } from './templates/moderation-decision'
 import { NoteMentionEmail } from './templates/note-mention'
 import { TicketEventEmail } from './templates/ticket-event'
-import { ChangelogPublishedEmail } from './templates/changelog-published'
-import { PasswordResetEmail } from './templates/password-reset'
+import {
+  ChangelogPublishedEmail,
+  CHANGELOG_PUBLISHED_MESSAGES,
+} from './templates/changelog-published'
+import { PasswordResetEmail, PASSWORD_RESET_MESSAGES } from './templates/password-reset'
 import { RecoveryCodeUsedEmail } from './templates/recovery-code-used'
 import {
   PlanLimitsEmail,
@@ -90,11 +98,14 @@ import {
 } from './templates/sending-domain-attention'
 import { DomainAttentionEmail, domainAttentionTitle } from './templates/domain-attention'
 import { NewSignInEmail } from './templates/new-sign-in'
-import { StatusIncidentPublishedEmail } from './templates/status-incident-published'
+import {
+  StatusIncidentPublishedEmail,
+  STATUS_EMAIL_MESSAGES,
+} from './templates/status-incident-published'
 import type { IncidentImpact } from './templates/status-incident-published'
 import { StatusMaintenanceScheduledEmail } from './templates/status-maintenance-scheduled'
 import { CsatRequestEmail } from './templates/csat-request'
-import { VerifyAddressEmail } from './templates/verify-address'
+import { VerifyAddressEmail, VERIFY_ADDRESS_MESSAGES } from './templates/verify-address'
 export { setEmailPoweredByResolver } from './powered-by'
 export { setSesTenantHooks } from './tenant-hooks'
 export type { SesTenantHooks, SesTenantSendContext } from './tenant-hooks'
@@ -750,15 +761,17 @@ interface SendPortalInviteParams {
   inviteLink: string
   logoUrl?: string
   personalMessage?: string
+  /** The reader's language; English without one. */
+  i18n?: EmailLocale
 }
 
 export async function sendPortalInviteEmail(params: SendPortalInviteParams): Promise<EmailResult> {
-  const { to, workspaceName, inviteLink, logoUrl, personalMessage } = params
+  const { to, workspaceName, inviteLink, logoUrl, personalMessage, i18n = ENGLISH_EMAIL } = params
 
   return sendEmail({
     to,
-    subject: `You've been invited to ${workspaceName}`,
-    react: PortalInviteEmail({ workspaceName, inviteLink, logoUrl, personalMessage }),
+    subject: i18n.t(PORTAL_INVITE_MESSAGES.subject, { workspace: workspaceName }),
+    react: PortalInviteEmail({ workspaceName, inviteLink, logoUrl, personalMessage, i18n }),
     emailType: 'PortalInviteEmail',
     workspaceName,
     preview: { inviteLink },
@@ -837,22 +850,30 @@ interface SendMagicLinkParams {
   logoUrl?: string
   /** The workspace being signed in to, named in the subject beside the code. */
   workspaceName?: string
+  /** The reader's language; English without one. */
+  i18n?: EmailLocale
 }
 
 /** The code first, so the inbox list alone is enough to sign in. */
-export function magicLinkSubject(code: string, workspaceName?: string): string {
+export function magicLinkSubject(
+  code: string,
+  workspaceName?: string,
+  i18n: EmailLocale = ENGLISH_EMAIL
+): string {
   const name = workspaceName?.trim()
-  return name ? `${code} is your code for ${name}` : `${code} is your sign-in code`
+  return name
+    ? i18n.t(MAGIC_LINK_MESSAGES.subjectNamed, { code, workspace: name })
+    : i18n.t(MAGIC_LINK_MESSAGES.subject, { code })
 }
 
 export async function sendMagicLinkEmail(params: SendMagicLinkParams): Promise<EmailResult> {
-  const { to, signInUrl, code, logoUrl, workspaceName } = params
+  const { to, signInUrl, code, logoUrl, workspaceName, i18n = ENGLISH_EMAIL } = params
 
   log.debug('sending sign-in email')
   return sendEmail({
     to,
-    subject: magicLinkSubject(code, workspaceName),
-    react: MagicLinkEmail({ signInUrl, code, logoUrl, workspaceName }),
+    subject: magicLinkSubject(code, workspaceName, i18n),
+    react: MagicLinkEmail({ signInUrl, code, logoUrl, workspaceName, i18n }),
     emailType: 'MagicLinkEmail',
     workspaceName,
     preview: { signInUrl, code },
@@ -873,6 +894,8 @@ interface SendSignupNotAllowedParams {
   to: ContactEmail
   workspaceName?: string
   logoUrl?: string
+  /** The reader's language; English without one. */
+  i18n?: EmailLocale
 }
 
 /**
@@ -883,13 +906,15 @@ interface SendSignupNotAllowedParams {
 export async function sendSignupNotAllowedEmail(
   params: SendSignupNotAllowedParams
 ): Promise<EmailResult> {
-  const { to, workspaceName, logoUrl } = params
+  const { to, workspaceName, logoUrl, i18n = ENGLISH_EMAIL } = params
 
   log.debug('sending sign-in refusal email')
   return sendEmail({
     to,
-    subject: `About your ${workspaceName?.trim() || QUACKBACK_DISPLAY_NAME} sign-in request`,
-    react: SignupNotAllowedEmail({ workspaceName, logoUrl }),
+    subject: i18n.t(SIGNUP_NOT_ALLOWED_MESSAGES.subject, {
+      workspace: workspaceName?.trim() || QUACKBACK_DISPLAY_NAME,
+    }),
+    react: SignupNotAllowedEmail({ workspaceName, logoUrl, i18n }),
     emailType: 'SignupNotAllowedEmail',
     workspaceName,
   })
@@ -905,18 +930,22 @@ interface SendPasswordResetParams {
   logoUrl?: string
   /** The workspace the account belongs to; names the platform From. */
   workspaceName?: string
+  /** The reader's language; English without one. */
+  i18n?: EmailLocale
 }
 
 export async function sendPasswordResetEmail(
   params: SendPasswordResetParams
 ): Promise<EmailResult> {
-  const { to, resetLink, logoUrl, workspaceName } = params
+  const { to, resetLink, logoUrl, workspaceName, i18n = ENGLISH_EMAIL } = params
 
   log.debug('sending password reset email')
   return sendEmail({
     to,
-    subject: `Reset your ${workspaceName?.trim() || QUACKBACK_DISPLAY_NAME} password`,
-    react: PasswordResetEmail({ resetLink, logoUrl, workspaceName }),
+    subject: i18n.t(PASSWORD_RESET_MESSAGES.subjectNamed, {
+      workspace: workspaceName?.trim() || QUACKBACK_DISPLAY_NAME,
+    }),
+    react: PasswordResetEmail({ resetLink, logoUrl, workspaceName, i18n }),
     emailType: 'PasswordResetEmail',
     workspaceName,
     preview: { resetLink },
@@ -1157,6 +1186,8 @@ interface SendStatusChangeParams {
   from?: SendingIdentity
   /** Display name for the From header, on `from` or on the platform default. */
   fromDisplayName?: string
+  /** The reader's language; English without one. */
+  i18n?: EmailLocale
 }
 
 export async function sendStatusChangeEmail(params: SendStatusChangeParams): Promise<EmailResult> {
@@ -1173,16 +1204,16 @@ export async function sendStatusChangeEmail(params: SendStatusChangeParams): Pro
     isPostAuthor = false,
     from,
     fromDisplayName,
+    i18n = ENGLISH_EMAIL,
   } = params
 
   const formattedNewStatus = newStatus.replace(/_/g, ' ')
 
   return sendEmail({
     to,
-    subject: isPostAuthor
-      ? `Your feedback is now ${formattedNewStatus}!`
-      : `A post you follow is now ${formattedNewStatus}`,
+    subject: statusChangeHeadline(formattedNewStatus, isPostAuthor, i18n),
     react: StatusChangeEmail({
+      i18n,
       postTitle,
       postUrl,
       previousStatus,
@@ -1224,6 +1255,8 @@ interface SendNewCommentParams {
   from?: SendingIdentity
   /** Display name for the From header, on `from` or on the platform default. */
   fromDisplayName?: string
+  /** The reader's language; English without one. */
+  i18n?: EmailLocale
 }
 
 export async function sendNewCommentEmail(params: SendNewCommentParams): Promise<EmailResult> {
@@ -1241,12 +1274,14 @@ export async function sendNewCommentEmail(params: SendNewCommentParams): Promise
     isPostAuthor = false,
     from,
     fromDisplayName,
+    i18n = ENGLISH_EMAIL,
   } = params
 
   return sendEmail({
     to,
-    subject: `New comment on "${postTitle}"`,
+    subject: i18n.t(NEW_COMMENT_MESSAGES.subject, { post: postTitle }),
     react: NewCommentEmail({
+      i18n,
       postTitle,
       postUrl,
       commenterName,
@@ -1320,6 +1355,8 @@ interface SendConversationMessageEmailParams {
   conversationId?: string | null
   /** Real files to carry as MIME attachments. */
   attachments?: EmailAttachment[]
+  /** The reader's language; English without one. */
+  i18n?: EmailLocale
 }
 
 /**
@@ -1352,9 +1389,11 @@ export async function sendConversationMessageEmail(
     fromDisplayName,
     conversationId,
     attachments,
+    i18n,
   } = params
 
   const copy = conversationMessageCopy({
+    i18n,
     direction,
     senderName,
     senderIsTeam,
@@ -1375,8 +1414,10 @@ export async function sendConversationMessageEmail(
         teamName: senderIsTeam && senderName === workspaceName ? undefined : workspaceName,
         viewUrl: ctaUrl,
         quotedPrevious,
+        i18n,
       })
     : ConversationMessageEmail({
+        i18n,
         heading: copy.heading,
         intro: copy.intro,
         senderName,
@@ -1422,14 +1463,17 @@ export async function sendConversationClosedEmail(params: {
   inReplyTo?: string
   references?: string[]
   conversationId?: string | null
+  i18n?: EmailLocale
 }): Promise<EmailResult> {
+  const i18n = params.i18n ?? ENGLISH_EMAIL
   const subject =
     conversationReplySubject(params.conversationSubject) ??
-    `Re: your conversation with ${params.workspaceName}`
+    i18n.t(CONVERSATION_MESSAGES.closedSubject, { workspace: params.workspaceName })
   return sendEmail({
     to: params.to,
     subject,
     react: ConversationClosedEmail({
+      i18n,
       workspaceName: params.workspaceName,
       variant: params.variant,
       viewUrl: params.viewUrl,
@@ -1461,16 +1505,20 @@ export async function sendConversationAutoAckEmail(params: {
   /** Display name for the From header (the workspace's name). */
   fromDisplayName?: string
   conversationId?: string | null
+  i18n?: EmailLocale
 }): Promise<EmailResult> {
+  const i18n = params.i18n ?? ENGLISH_EMAIL
   const subject =
     conversationReplySubject(params.conversationSubject) ??
-    `Re: your message to ${params.workspaceName}`
+    i18n.t(CONVERSATION_MESSAGES.ackSubject, { workspace: params.workspaceName })
+  const ack = i18n.t(CONVERSATION_MESSAGES.ackBody)
   return sendEmail({
     to: params.to,
     subject,
     react: ConversationReplyEmail({
-      bodyHtml: `<p>We received your email and will get back to you shortly.</p>`,
-      messagePreview: 'We received your email and will get back to you shortly.',
+      i18n,
+      bodyHtml: `<p>${escapeHtml(ack)}</p>`,
+      messagePreview: ack,
       agentName: params.workspaceName,
       teamName: params.workspaceName,
     }),
@@ -1536,6 +1584,8 @@ export interface SendTicketEventEmailParams {
   messageId?: string
   inReplyTo?: string
   references?: string[]
+  /** The reader's language; English without one. */
+  i18n?: EmailLocale
 }
 
 interface TicketEmailCopy {
@@ -1548,28 +1598,159 @@ interface TicketEmailCopy {
   factLine?: string
 }
 
+const TICKET_MESSAGES = defineEmailMessages({
+  requesterReason: {
+    id: 'email.ticket.requesterReason',
+    defaultMessage: "You're receiving this because you opened ticket {ticket} at {workspace}.",
+  },
+  viewTicket: { id: 'email.ticket.viewTicket', defaultMessage: 'View your ticket' },
+  openInbox: { id: 'email.conversation.openInbox', defaultMessage: 'Open inbox' },
+  createdSubject: {
+    id: 'email.ticket.createdSubject',
+    defaultMessage: 'We received your ticket {ticket}: {title}',
+  },
+  createdHeading: { id: 'email.ticket.createdHeading', defaultMessage: "We've got your ticket" },
+  createdIntro: {
+    id: 'email.ticket.createdIntro',
+    defaultMessage:
+      'Your ticket {ticket} "{title}" is with the {workspace} team. We\'ll email you as soon as there\'s a reply.',
+  },
+  replySubject: {
+    id: 'email.ticket.replySubject',
+    defaultMessage: 'New reply on {ticket}: {title}',
+  },
+  replyHeading: { id: 'email.ticket.replyHeading', defaultMessage: 'New reply on your ticket' },
+  replyIntro: {
+    id: 'email.ticket.replyIntro',
+    defaultMessage: '{name} replied to {ticket} "{title}":',
+  },
+  theTeam: { id: 'email.ticket.theTeam', defaultMessage: 'The team' },
+  closedSubject: {
+    id: 'email.ticket.closedSubject',
+    defaultMessage: 'Your ticket {ticket} was closed',
+  },
+  closedHeading: { id: 'email.ticket.closedHeading', defaultMessage: 'Your ticket was closed' },
+  closedIntro: {
+    id: 'email.ticket.closedIntro',
+    defaultMessage: '{ticket} "{title}" has been closed by the {workspace} team.',
+  },
+  closedNote: {
+    id: 'email.ticket.closedNote',
+    defaultMessage: 'If you have a follow-up, reply on the ticket thread. Replying reopens it.',
+  },
+  resolvedSubject: {
+    id: 'email.ticket.resolvedSubject',
+    defaultMessage: 'Your ticket {ticket} was resolved',
+  },
+  resolvedHeading: {
+    id: 'email.ticket.resolvedHeading',
+    defaultMessage: 'Your ticket was resolved',
+  },
+  resolvedIntro: {
+    id: 'email.ticket.resolvedIntro',
+    defaultMessage: '{ticket} "{title}" has been marked resolved by the {workspace} team.',
+  },
+  resolvedNote: {
+    id: 'email.ticket.resolvedNote',
+    defaultMessage: "Reply on the ticket thread if this isn't fixed for you; replying reopens it.",
+  },
+  assignedSubject: {
+    id: 'email.ticket.assignedSubject',
+    defaultMessage: 'Ticket {ticket} assigned to you',
+  },
+  assignedHeading: {
+    id: 'email.ticket.assignedHeading',
+    defaultMessage: 'You were assigned a ticket',
+  },
+  assignedIntro: {
+    id: 'email.ticket.assignedIntro',
+    defaultMessage: '{ticket} "{title}" was assigned to you.',
+  },
+  assignedReason: {
+    id: 'email.ticket.assignedReason',
+    defaultMessage: "You're receiving this because the ticket was assigned to you.",
+  },
+  teamSubject: {
+    id: 'email.ticket.teamSubject',
+    defaultMessage: 'Ticket {ticket} assigned to your team',
+  },
+  teamHeading: {
+    id: 'email.ticket.teamHeading',
+    defaultMessage: 'A ticket was assigned to your team',
+  },
+  teamIntro: {
+    id: 'email.ticket.teamIntro',
+    defaultMessage: '{ticket} "{title}" was assigned to your team.',
+  },
+  teamReason: {
+    id: 'email.ticket.teamReason',
+    defaultMessage: "You're receiving this because the ticket was assigned to your team.",
+  },
+  slaReason: {
+    id: 'email.ticket.slaReason',
+    defaultMessage: "You're receiving this because you're responsible for this conversation.",
+  },
+  clockResponse: { id: 'email.ticket.clockResponse', defaultMessage: 'response' },
+  clockFirstResponse: { id: 'email.ticket.clockFirstResponse', defaultMessage: 'first response' },
+  clockNextResponse: { id: 'email.ticket.clockNextResponse', defaultMessage: 'next response' },
+  clockTimeToResolve: { id: 'email.ticket.clockTimeToResolve', defaultMessage: 'time to resolve' },
+  clockResolution: { id: 'email.ticket.clockResolution', defaultMessage: 'resolution' },
+  dueSoon: { id: 'email.ticket.dueSoon', defaultMessage: 'soon' },
+  dueEarlier: { id: 'email.ticket.dueEarlier', defaultMessage: 'earlier' },
+  warningSubject: {
+    id: 'email.ticket.warningSubject',
+    defaultMessage: 'SLA at risk: {clock} due {due}',
+  },
+  warningHeading: {
+    id: 'email.ticket.warningHeading',
+    defaultMessage: '{Clock} SLA approaching breach',
+  },
+  warningIntro: {
+    id: 'email.ticket.warningIntro',
+    defaultMessage: 'The conversation with {title} needs a {clock} soon.',
+  },
+  warningFact: { id: 'email.ticket.warningFact', defaultMessage: '{Clock} due {due}' },
+  breachSubject: {
+    id: 'email.ticket.breachSubject',
+    defaultMessage: 'SLA breached: {clock} for {title}',
+  },
+  breachHeading: { id: 'email.ticket.breachHeading', defaultMessage: '{Clock} SLA breached' },
+  breachIntro: {
+    id: 'email.ticket.breachIntro',
+    defaultMessage: 'The conversation with {title} has passed its {clock} target.',
+  },
+  breachFact: { id: 'email.ticket.breachFact', defaultMessage: '{Clock} was due {due}' },
+})
+
 /**
  * Per-kind copy, derived from structured facts — the sendConversationMessageEmail
  * `direction` pattern generalized to the seven ticket kinds. The app passes
- * facts (labels, names, times), never prose.
+ * facts (labels, names, times), never prose; `clockLabel` and `dueLabel`
+ * arrive already in the reader's language.
  */
 function ticketEventCopy(p: SendTicketEventEmailParams): TicketEmailCopy {
-  const requesterReason = `You're receiving this because you opened ticket ${p.ticketLabel} at ${p.workspaceName}.`
+  const M = TICKET_MESSAGES
+  const { t } = p.i18n ?? ENGLISH_EMAIL
+  const words = { ticket: p.ticketLabel, title: p.title, workspace: p.workspaceName }
+  const requesterReason = t(M.requesterReason, words)
+  const viewTicket = t(M.viewTicket)
+  const clock = p.clockLabel ?? t(M.clockResponse)
+  const sla = { ...words, clock, Clock: capitalize(clock) }
   switch (p.kind) {
     case 'created':
       return {
-        subject: `We received your ticket ${p.ticketLabel}: ${p.title}`,
-        heading: "We've got your ticket",
-        intro: `Your ticket ${p.ticketLabel} "${p.title}" is with the ${p.workspaceName} team. We'll email you as soon as there's a reply.`,
-        ctaLabel: 'View your ticket',
+        subject: t(M.createdSubject, words),
+        heading: t(M.createdHeading),
+        intro: t(M.createdIntro, words),
+        ctaLabel: viewTicket,
         reason: requesterReason,
       }
     case 'reply':
       return {
-        subject: `New reply on ${p.ticketLabel}: ${p.title}`,
-        heading: 'New reply on your ticket',
-        intro: `${p.authorName ?? 'The team'} replied to ${p.ticketLabel} "${p.title}":`,
-        ctaLabel: 'View your ticket',
+        subject: t(M.replySubject, words),
+        heading: t(M.replyHeading),
+        intro: t(M.replyIntro, { ...words, name: p.authorName ?? t(M.theTeam) }),
+        ctaLabel: viewTicket,
         reason: requesterReason,
       }
     case 'status_resolved':
@@ -1578,57 +1759,83 @@ function ticketEventCopy(p: SendTicketEventEmailParams): TicketEmailCopy {
       // customer story for a won't-do close is a plain close.
       if (p.closedGeneric) {
         return {
-          subject: `Your ticket ${p.ticketLabel} was closed`,
-          heading: 'Your ticket was closed',
-          intro: `${p.ticketLabel} "${p.title}" has been closed by the ${p.workspaceName} team.`,
-          note: 'If you have a follow-up, reply on the ticket thread. Replying reopens it.',
-          ctaLabel: 'View your ticket',
+          subject: t(M.closedSubject, words),
+          heading: t(M.closedHeading),
+          intro: t(M.closedIntro, words),
+          note: t(M.closedNote),
+          ctaLabel: viewTicket,
           reason: requesterReason,
         }
       }
       return {
-        subject: `Your ticket ${p.ticketLabel} was resolved`,
-        heading: 'Your ticket was resolved',
-        intro: `${p.ticketLabel} "${p.title}" has been marked resolved by the ${p.workspaceName} team.`,
-        note: "Reply on the ticket thread if this isn't fixed for you; replying reopens it.",
-        ctaLabel: 'View your ticket',
+        subject: t(M.resolvedSubject, words),
+        heading: t(M.resolvedHeading),
+        intro: t(M.resolvedIntro, words),
+        note: t(M.resolvedNote),
+        ctaLabel: viewTicket,
         reason: requesterReason,
       }
     case 'assigned':
       return {
-        subject: `Ticket ${p.ticketLabel} assigned to you`,
-        heading: 'You were assigned a ticket',
-        intro: `${p.ticketLabel} "${p.title}" was assigned to you.`,
-        ctaLabel: 'Open in inbox',
-        reason: "You're receiving this because the ticket was assigned to you.",
+        subject: t(M.assignedSubject, words),
+        heading: t(M.assignedHeading),
+        intro: t(M.assignedIntro, words),
+        ctaLabel: t(M.openInbox),
+        reason: t(M.assignedReason),
       }
     case 'assigned_team':
       return {
-        subject: `Ticket ${p.ticketLabel} assigned to your team`,
-        heading: 'A ticket was assigned to your team',
-        intro: `${p.ticketLabel} "${p.title}" was assigned to your team.`,
-        ctaLabel: 'Open in inbox',
-        reason: "You're receiving this because the ticket was assigned to your team.",
+        subject: t(M.teamSubject, words),
+        heading: t(M.teamHeading),
+        intro: t(M.teamIntro, words),
+        ctaLabel: t(M.openInbox),
+        reason: t(M.teamReason),
       }
-    case 'sla_warning':
+    case 'sla_warning': {
+      const due = p.dueLabel ?? t(M.dueSoon)
       return {
-        subject: `SLA at risk: ${p.clockLabel ?? 'response'} due ${p.dueLabel ?? 'soon'}`,
-        heading: `${capitalize(p.clockLabel ?? 'Response')} SLA approaching breach`,
-        intro: `The conversation with ${p.title} needs a ${p.clockLabel ?? 'response'} soon.`,
-        factLine: `${capitalize(p.clockLabel ?? 'Response')} due ${p.dueLabel ?? 'soon'}`,
-        ctaLabel: 'Open in inbox',
-        reason: "You're receiving this because you're responsible for this conversation.",
+        subject: t(M.warningSubject, { ...sla, due }),
+        heading: t(M.warningHeading, sla),
+        intro: t(M.warningIntro, sla),
+        factLine: t(M.warningFact, { ...sla, due }),
+        ctaLabel: t(M.openInbox),
+        reason: t(M.slaReason),
       }
-    case 'sla_breach':
+    }
+    case 'sla_breach': {
+      const due = p.dueLabel ?? t(M.dueEarlier)
       return {
-        subject: `SLA breached: ${p.clockLabel ?? 'response'} for ${p.title}`,
-        heading: `${capitalize(p.clockLabel ?? 'Response')} SLA breached`,
-        intro: `The conversation with ${p.title} has passed its ${p.clockLabel ?? 'response'} target.`,
-        factLine: `${capitalize(p.clockLabel ?? 'Response')} was due ${p.dueLabel ?? 'earlier'}`,
-        ctaLabel: 'Open in inbox',
-        reason: "You're receiving this because you're responsible for this conversation.",
+        subject: t(M.breachSubject, sla),
+        heading: t(M.breachHeading, sla),
+        intro: t(M.breachIntro, sla),
+        factLine: t(M.breachFact, { ...sla, due }),
+        ctaLabel: t(M.openInbox),
+        reason: t(M.slaReason),
       }
+    }
   }
+}
+
+/** An SLA clock named in the reader's language, for `clockLabel`. */
+export function slaClockLabel(clock: string, i18n: EmailLocale = ENGLISH_EMAIL): string {
+  const M = TICKET_MESSAGES
+  const message =
+    clock === 'first_response'
+      ? M.clockFirstResponse
+      : clock === 'next_response'
+        ? M.clockNextResponse
+        : clock === 'time_to_resolve'
+          ? M.clockTimeToResolve
+          : M.clockResolution
+  return i18n.t(message)
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
 }
 
 function capitalize(s: string): string {
@@ -1645,6 +1852,7 @@ export async function sendTicketEventEmail(
     to: params.to,
     subject: copy.subject,
     react: TicketEventEmail({
+      i18n: params.i18n,
       heading: copy.heading,
       intro: copy.intro,
       messageBody: params.messageBody,
@@ -1756,6 +1964,8 @@ export interface SendModerationDecisionEmailArgs {
   from?: SendingIdentity
   /** Display name for the From header, on `from` or on the platform default. */
   fromDisplayName?: string
+  /** The reader's language; English without one. */
+  i18n?: EmailLocale
 }
 
 /** Tell the author of a held post or comment what the team decided. */
@@ -1763,10 +1973,12 @@ export async function sendModerationDecisionEmail(
   args: SendModerationDecisionEmailArgs
 ): Promise<EmailResult> {
   const { to, item, decision, postTitle, postUrl, workspaceName, unsubscribeUrl } = args
+  const i18n = args.i18n ?? ENGLISH_EMAIL
   return sendEmail({
     to,
-    subject: moderationDecisionHeadline(item, decision),
+    subject: moderationDecisionHeadline(item, decision, i18n),
     react: ModerationDecisionEmail({
+      i18n,
       item,
       decision,
       postTitle,
@@ -1867,6 +2079,8 @@ interface SendChangelogPublishedParams {
   from?: SendingIdentity
   /** Display name for the From header, on `from` or on the platform default. */
   fromDisplayName?: string
+  /** The reader's language; English without one. */
+  i18n?: EmailLocale
 }
 
 export async function sendChangelogPublishedEmail(
@@ -1884,12 +2098,14 @@ export async function sendChangelogPublishedEmail(
     logoUrl,
     from,
     fromDisplayName,
+    i18n = ENGLISH_EMAIL,
   } = params
 
   return sendEmail({
     to,
-    subject: `New update: ${changelogTitle}`,
+    subject: i18n.t(CHANGELOG_PUBLISHED_MESSAGES.subject, { title: changelogTitle }),
     react: ChangelogPublishedEmail({
+      i18n,
       changelogTitle,
       changelogUrl,
       contentPreview,
@@ -1929,6 +2145,8 @@ interface SendStatusIncidentPublishedParams {
   from?: SendingIdentity
   /** Display name for the From header, on `from` or on the platform default. */
   fromDisplayName?: string
+  /** The reader's language; English without one. */
+  i18n?: EmailLocale
 }
 
 /** Sent once when a new incident is published on the workspace's status page. */
@@ -1949,12 +2167,14 @@ export async function sendStatusIncidentPublishedEmail(
     logoUrl,
     from,
     fromDisplayName,
+    i18n = ENGLISH_EMAIL,
   } = params
 
   return sendEmail({
     to,
-    subject: `Incident: ${incidentTitle}`,
+    subject: i18n.t(STATUS_EMAIL_MESSAGES.incidentSubject, { title: incidentTitle }),
     react: StatusIncidentPublishedEmail({
+      i18n,
       workspaceName,
       incidentTitle,
       impact,
@@ -1998,6 +2218,8 @@ interface SendStatusMaintenanceScheduledParams {
   from?: SendingIdentity
   /** Display name for the From header, on `from` or on the platform default. */
   fromDisplayName?: string
+  /** The reader's language; English without one. */
+  i18n?: EmailLocale
 }
 
 /** Sent once when maintenance is scheduled on the workspace's status page. */
@@ -2018,12 +2240,14 @@ export async function sendStatusMaintenanceScheduledEmail(
     logoUrl,
     from,
     fromDisplayName,
+    i18n = ENGLISH_EMAIL,
   } = params
 
   return sendEmail({
     to,
-    subject: `Scheduled maintenance: ${maintenanceTitle}`,
+    subject: i18n.t(STATUS_EMAIL_MESSAGES.maintenanceSubject, { title: maintenanceTitle }),
     react: StatusMaintenanceScheduledEmail({
+      i18n,
       workspaceName,
       maintenanceTitle,
       body,
@@ -2079,6 +2303,8 @@ interface SendCsatRequestEmailParams {
   inReplyTo?: string
   references?: string[]
   conversationId?: string | null
+  /** The reader's language; English without one. */
+  i18n?: EmailLocale
 }
 
 /** Sent by the workflow engine's send_block csat path (action.executor.ts)
@@ -2088,17 +2314,17 @@ interface SendCsatRequestEmailParams {
 export async function sendCsatRequestEmail(
   params: SendCsatRequestEmailParams
 ): Promise<EmailResult> {
-  const { to, promptText, ratingUrls, workspaceName, logoUrl } = params
+  const { to, promptText, ratingUrls, workspaceName, logoUrl, i18n = ENGLISH_EMAIL } = params
   // A reply on the thread rather than a fresh subject, so the request lands in
   // the conversation the customer is rating instead of starting a new one.
   const subject =
     conversationReplySubject(params.conversationSubject) ??
-    `Re: your conversation with ${workspaceName}`
+    i18n.t(CONVERSATION_MESSAGES.closedSubject, { workspace: workspaceName })
 
   return sendEmail({
     to,
     subject,
-    react: CsatRequestEmail({ promptText, ratingUrls, workspaceName, logoUrl }),
+    react: CsatRequestEmail({ promptText, ratingUrls, workspaceName, logoUrl, i18n }),
     from: params.from,
     fromDisplayName: params.fromDisplayName,
     replyTo: params.replyTo,
@@ -2149,6 +2375,14 @@ export { CsatRequestEmail, CSAT_FACES as CSAT_REQUEST_EMAIL_FACES } from './temp
 export { ConversationReplyEmail } from './templates/conversation-reply'
 export { ConversationMessageEmail } from './templates/conversation-message'
 export {
+  ENGLISH_EMAIL,
+  emailMessages,
+  formatEnglish,
+  type EmailLocale,
+  type EmailMessage,
+  type EmailValues,
+} from './i18n'
+export {
   conversationReplySubject,
   conversationMessageCopy,
   assembleOutboundThreading,
@@ -2168,6 +2402,8 @@ export interface SendVerifyAddressEmailParams {
   code: string
   workspaceName?: string
   logoUrl?: string
+  /** The reader's language; English without one. */
+  i18n?: EmailLocale
 }
 
 /**
@@ -2178,12 +2414,12 @@ export interface SendVerifyAddressEmailParams {
 export async function sendVerifyAddressEmail(
   params: SendVerifyAddressEmailParams
 ): Promise<EmailResult> {
-  const { to, code, workspaceName, logoUrl } = params
+  const { to, code, workspaceName, logoUrl, i18n = ENGLISH_EMAIL } = params
   log.debug('sending address verification code')
   return sendEmail({
     to,
-    subject: 'Confirm your email address',
-    react: VerifyAddressEmail({ code, workspaceName, logoUrl }),
+    subject: i18n.t(VERIFY_ADDRESS_MESSAGES.subject),
+    react: VerifyAddressEmail({ code, workspaceName, logoUrl, i18n }),
     emailType: 'VerifyAddressEmail',
     workspaceName,
   })

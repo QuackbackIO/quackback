@@ -13,6 +13,7 @@ import {
   sendTicketEventEmail,
   sendNoteMentionEmail,
   sendModerationDecisionEmail,
+  slaClockLabel,
 } from '@quackback/email'
 import type { EmailResult, IncidentImpact, SendingIdentity } from '@quackback/email'
 import type { TicketId } from '@quackback/ids'
@@ -43,6 +44,12 @@ import { withEmailIdempotencyKey } from '@quackback/email/idempotency'
 import { permittedSendingIdentity } from '@/lib/server/domains/channel-accounts/outbound-identity'
 import { getsAutomatedEmail } from '@/lib/server/domains/principals/blocking'
 import { logger } from '@/lib/server/logger'
+import { recipientEmailLocale } from '@/lib/server/email/email-locale'
+import {
+  formatSlaDueFor,
+  localizeStatusEmail,
+  maintenanceWindow,
+} from '@/lib/server/email/email-labels'
 
 /** The event types whose email is one of the seven ticket-lifecycle kinds. */
 const TICKET_EMAIL_EVENT_TYPES = new Set<string>([
@@ -214,11 +221,14 @@ async function deliverEmail(
     // The From the config asks for, once the send guard permits it; nothing
     // when it asks for none.
     const sender = await checkedSender(cfg)
+    // The reader's language; the words people wrote stay as written.
+    const i18n = await recipientEmailLocale({ principalId, email })
     let result: EmailResult
 
     if (event.type === 'post.status_changed') {
       result = await sendStatusChangeEmail({
         to: email,
+        i18n,
         postTitle: cfg.postTitle,
         postUrl: cfg.postUrl,
         previousStatus: cfg.previousStatus!,
@@ -233,6 +243,7 @@ async function deliverEmail(
     } else if (event.type === 'comment.created') {
       result = await sendNewCommentEmail({
         to: email,
+        i18n,
         postTitle: cfg.postTitle,
         postUrl: cfg.postUrl,
         commenterName: cfg.commenterName!,
@@ -284,6 +295,7 @@ async function deliverEmail(
       const c = config as unknown as ModerationDecisionEmailConfig
       result = await sendModerationDecisionEmail({
         to: email,
+        i18n,
         item: c.item,
         decision: c.decision,
         postTitle: c.postTitle,
@@ -310,6 +322,7 @@ async function deliverEmail(
       const changelogCfg = config as Record<string, unknown>
       result = await sendChangelogPublishedEmail({
         to: email,
+        i18n,
         changelogTitle: changelogCfg.changelogTitle as string,
         changelogUrl: changelogCfg.changelogUrl as string,
         contentPreview: (changelogCfg.contentPreview as string) ?? '',
@@ -324,11 +337,11 @@ async function deliverEmail(
       const c = config as Record<string, unknown>
       result = await sendStatusIncidentPublishedEmail({
         to: email,
+        i18n,
         incidentTitle: c.incidentTitle as string,
         impact: (c.impact as IncidentImpact) ?? 'none',
-        statusLabel: c.statusLabel as string,
+        ...localizeStatusEmail(c, i18n),
         body: (c.body as string) ?? '',
-        affectedComponents: (c.affectedComponents as Array<{ name: string; status: string }>) ?? [],
         incidentUrl: c.incidentUrl as string,
         workspaceName: cfg.workspaceName,
         unsubscribeUrl: unsubscribeUrl ?? '',
@@ -340,10 +353,10 @@ async function deliverEmail(
       const c = config as Record<string, unknown>
       result = await sendStatusMaintenanceScheduledEmail({
         to: email,
+        i18n,
         maintenanceTitle: c.incidentTitle as string,
         body: (c.body as string) ?? '',
-        startLabel: (c.scheduledStartLabel as string) ?? '',
-        endLabel: (c.scheduledEndLabel as string) ?? '',
+        ...maintenanceWindow(c, i18n),
         affectedComponents: ((c.affectedComponents as Array<{ name: string }>) ?? []).map(
           (a) => a.name
         ),
@@ -365,6 +378,9 @@ async function deliverEmail(
       result = await sendTicketEventEmail({
         to: email,
         ...t,
+        ...(t.clock ? { clockLabel: slaClockLabel(t.clock, i18n) } : {}),
+        ...(t.dueAt ? { dueLabel: formatSlaDueFor(t.dueAt, i18n.lang) } : {}),
+        i18n,
         // Agent-facing ticket mail carries no From, so no name either: it goes
         // from the platform address, which the email package names for
         // `workspaceName`.

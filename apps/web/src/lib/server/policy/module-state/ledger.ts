@@ -597,6 +597,22 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'Up to 32 theme stylesheets this module generated, as a set of their exact text, so reading one back trusts its picked colours. A cross-workspace hit means another workspace has byte-identical generated theme text, which reads back to the same palettes either way.',
   },
   {
+    file: 'apps/web/src/lib/server/email/email-locale.ts',
+    name: 'locales',
+    category: 'content-addressed',
+    reason:
+      'Email formatters keyed by locale, built from the static message catalogues in the bundle; ' +
+      'the same for every workspace.',
+  },
+  {
+    file: 'packages/email/src/i18n.ts',
+    name: 'registry',
+    category: 'process-lifetime',
+    reason:
+      'The email templates register their message ids and English at import time; static code, ' +
+      'the same for every workspace.',
+  },
+  {
     file: 'apps/web/src/lib/shared/i18n.ts',
     name: 'messageCache',
     category: 'content-addressed',

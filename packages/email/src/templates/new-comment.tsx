@@ -1,6 +1,31 @@
 import { Button, Column, Heading, Row, Section, Text } from '@react-email/components'
 import { EmailLayout, NotificationFooter, feedbackFooterReason } from './email-layout'
 import { typography, button, colors } from './shared-styles'
+import { ENGLISH_EMAIL, defineEmailMessages, type EmailLocale } from '../i18n'
+
+export const NEW_COMMENT_MESSAGES = defineEmailMessages({
+  subject: { id: 'email.newComment.subject', defaultMessage: 'New comment on "{post}"' },
+  headingAuthor: {
+    id: 'email.newComment.headingAuthor',
+    defaultMessage: 'New comment on your feedback',
+  },
+  headingFollower: {
+    id: 'email.newComment.headingFollower',
+    defaultMessage: 'New comment on a post you follow',
+  },
+  bodyAuthor: {
+    id: 'email.newComment.bodyAuthor',
+    defaultMessage: '{name} commented on your feedback in {workspace}.',
+  },
+  bodyFollower: {
+    id: 'email.newComment.bodyFollower',
+    defaultMessage: '{name} commented on a post you follow in {workspace}.',
+  },
+  team: { id: 'email.newComment.team', defaultMessage: '{name} (Team)' },
+  postLabel: { id: 'email.newComment.postLabel', defaultMessage: 'Feedback' },
+  cta: { id: 'email.newComment.cta', defaultMessage: 'View comment' },
+})
+const M = NEW_COMMENT_MESSAGES
 
 interface NewCommentEmailProps {
   postTitle: string
@@ -14,6 +39,7 @@ interface NewCommentEmailProps {
   logoUrl?: string
   /** The reader wrote the post. Everyone else follows it (voted, commented or subscribed). */
   isPostAuthor?: boolean
+  i18n?: EmailLocale
 }
 
 export function NewCommentEmail({
@@ -27,19 +53,23 @@ export function NewCommentEmail({
   preferencesUrl,
   logoUrl,
   isPostAuthor = false,
+  i18n = ENGLISH_EMAIL,
 }: NewCommentEmailProps) {
-  const whose = isPostAuthor ? 'your feedback' : 'a post you follow'
+  const { t } = i18n
+  const name = isTeamMember ? t(M.team, { name: commenterName }) : commenterName
   return (
     <EmailLayout
-      preview={`New comment on "${postTitle}"`}
+      preview={t(M.subject, { post: postTitle })}
       logoUrl={logoUrl}
       logoAlt={organizationName}
+      i18n={i18n}
     >
       {/* Content */}
-      <Heading style={typography.h1}>{`New comment on ${whose}`}</Heading>
+      <Heading style={typography.h1}>
+        {t(isPostAuthor ? M.headingAuthor : M.headingFollower)}
+      </Heading>
       <Text style={typography.text}>
-        {commenterName}
-        {isTeamMember ? ' (Team)' : ''} {`commented on ${whose} in ${organizationName}.`}
+        {t(isPostAuthor ? M.bodyAuthor : M.bodyFollower, { name, workspace: organizationName })}
       </Text>
 
       {/* Post Title */}
@@ -59,7 +89,7 @@ export function NewCommentEmail({
             color: colors.textMuted,
           }}
         >
-          Feedback
+          {t(M.postLabel)}
         </Text>
         <Text style={{ ...typography.text, marginTop: '0', marginBottom: '0', fontWeight: '600' }}>
           {postTitle}
@@ -86,15 +116,16 @@ export function NewCommentEmail({
       {/* CTA Button */}
       <Section style={{ textAlign: 'center', marginTop: '32px', marginBottom: '32px' }}>
         <Button style={button.primary} href={postUrl}>
-          View Comment
+          {t(M.cta)}
         </Button>
       </Section>
 
       {/* Footer */}
       <NotificationFooter
-        reason={feedbackFooterReason(isPostAuthor)}
+        reason={feedbackFooterReason(isPostAuthor, i18n)}
         unsubscribeUrl={unsubscribeUrl}
         preferencesUrl={preferencesUrl}
+        i18n={i18n}
       />
     </EmailLayout>
   )
