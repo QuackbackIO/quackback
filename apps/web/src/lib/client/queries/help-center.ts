@@ -42,6 +42,9 @@ export const helpCenterKeys = {
   articleDetails: () => [...helpCenterKeys.articles(), 'detail'] as const,
   articleDetail: (id: KbArticleId) =>
     [...helpCenterKeys.articleDetails(), canonicalArticleTypeId(id) ?? id] as const,
+  /** The editor's language bar for one article: each language's state. */
+  articleLanguages: (id: string) =>
+    [...helpCenterKeys.all, 'article-languages', canonicalArticleTypeId(id) ?? id] as const,
   articleFeedbackReasons: (id: KbArticleId) =>
     [...helpCenterKeys.articleDetail(id), 'feedback-reasons'] as const,
   public: () => [...helpCenterKeys.all, 'public'] as const,

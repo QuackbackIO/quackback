@@ -219,3 +219,73 @@ describe('an existing translation', () => {
     )
   })
 })
+
+describe('edits on screen that are not saved yet', () => {
+  const pendingReady = {
+    sourceRevision: 2,
+    createdAt: null,
+    current: true,
+    check: { ok: true, problems: [] },
+  }
+
+  it('are saved before the translation is marked as up to date', async () => {
+    renderPane(entry({ needsUpdate: true }))
+    fireEvent.change(await screen.findByLabelText('Article title'), {
+      target: { value: 'Konto einrichten, korrigiert' },
+    })
+    fns.getArticleTranslationFn.mockResolvedValue({
+      ...row,
+      title: 'Konto einrichten, korrigiert',
+      updatedAt: '2026-11-21T10:00:00.000Z',
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Mark as up to date' }))
+    await waitFor(() => expect(fns.markArticleTranslationCurrentFn).toHaveBeenCalled())
+    expect(fns.upsertArticleTranslationFn.mock.calls[0][0]).toMatchObject({
+      data: { articleId: 'article_1', locale: 'de', title: 'Konto einrichten, korrigiert' },
+    })
+    expect(fns.upsertArticleTranslationFn.mock.invocationCallOrder[0]).toBeLessThan(
+      fns.markArticleTranslationCurrentFn.mock.invocationCallOrder[0]
+    )
+    await waitFor(() => expect(fns.getArticleTranslationFn).toHaveBeenCalledTimes(2))
+    expect((screen.getByLabelText('Article title') as HTMLInputElement).value).toBe(
+      'Konto einrichten, korrigiert'
+    )
+  })
+
+  it('are saved before the status changes', async () => {
+    renderPane(entry())
+    fireEvent.change(await screen.findByLabelText('Article title'), {
+      target: { value: 'Konto einrichten, neu' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Published' }))
+    await waitFor(() => expect(fns.setArticleTranslationStatusFn).toHaveBeenCalled())
+    expect(fns.upsertArticleTranslationFn.mock.calls[0][0]).toMatchObject({
+      data: { title: 'Konto einrichten, neu' },
+    })
+  })
+
+  it('stay on screen when the saved translation changes only its state', async () => {
+    renderPane(entry({ needsUpdate: true, pendingUpdate: pendingReady }))
+    fireEvent.change(await screen.findByLabelText('Article title'), {
+      target: { value: 'Noch nicht gespeichert' },
+    })
+    // The refetch brings the same text with a new updatedAt, as a status change does.
+    fns.getArticleTranslationFn.mockResolvedValue({ ...row, updatedAt: '2026-11-22T10:00:00.000Z' })
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
+    await waitFor(() => expect(fns.getArticleTranslationFn).toHaveBeenCalledTimes(2))
+    expect((screen.getByLabelText('Article title') as HTMLInputElement).value).toBe(
+      'Noch nicht gespeichert'
+    )
+    expect(fns.upsertArticleTranslationFn).not.toHaveBeenCalled()
+  })
+
+  it('keep the AI update from replacing them until they are saved', async () => {
+    renderPane(entry({ needsUpdate: true, pendingUpdate: pendingReady }))
+    const publish = (await screen.findByRole('button', {
+      name: 'Publish update',
+    })) as HTMLButtonElement
+    expect(publish.disabled).toBe(false)
+    fireEvent.change(screen.getByLabelText('Article title'), { target: { value: 'Bearbeitet' } })
+    expect(publish.disabled).toBe(true)
+  })
+})

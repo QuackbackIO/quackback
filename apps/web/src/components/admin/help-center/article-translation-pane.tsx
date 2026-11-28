@@ -5,7 +5,6 @@ import { Loader2 } from 'lucide-react'
 import { Form } from '@/components/ui/form'
 import { Button } from '@/components/ui/button'
 import { ModalFooter } from '@/components/shared/modal-footer'
-import { TimeAgo } from '@/components/ui/time-ago'
 import {
   SidebarContainer,
   SidebarDivider,
@@ -92,7 +91,9 @@ export function ArticleTranslationPane(props: ArticleTranslationPaneProps) {
       }
   return (
     <TranslationForm
-      key={row?.updatedAt ?? 'new'}
+      // A new form only when the saved text changes, so a status change or a
+      // refetch keeps what the person is typing.
+      key={row ? savedTextKey(row) : 'new'}
       {...props}
       status={row?.status ?? null}
       updatedAt={row?.updatedAt ?? null}
@@ -100,6 +101,21 @@ export function ArticleTranslationPane(props: ArticleTranslationPaneProps) {
       startedFromSource={!row}
     />
   )
+}
+
+/** A short fingerprint of a translation's saved text. */
+function savedTextKey(row: {
+  title: string
+  description: string | null
+  content: string
+  contentJson: unknown
+}): string {
+  const text = [row.title, row.description ?? '', row.content, JSON.stringify(row.contentJson)]
+  let hash = 0x811c9dc5
+  for (const char of text.join('\u0000')) {
+    hash = Math.imul(hash ^ char.charCodeAt(0), 0x01000193)
+  }
+  return (hash >>> 0).toString(36)
 }
 
 function TranslationForm({
@@ -143,34 +159,45 @@ function TranslationForm({
     [form]
   )
 
+  const saveText = useCallback(
+    async (data: { title: string; description: string; content: string }) => {
+      await upsertArticleTranslationFn({
+        data: {
+          articleId,
+          locale,
+          title: data.title,
+          description: data.description.trim(),
+          content: data.content,
+          contentJson: contentJson as TiptapContent | null,
+        },
+      })
+      form.reset(data)
+    },
+    [articleId, locale, contentJson, form]
+  )
+  // An action on the saved translation (publish, mark as up to date) saves
+  // the edits on screen first, so it acts on the text the person sees.
+  const saveEdits = useCallback(async (): Promise<boolean> => {
+    if (!dirty) return true
+    if (!(await form.trigger())) return false
+    await saveText(form.getValues())
+    return true
+  }, [dirty, form, saveText])
+
   const handleSubmit = form.handleSubmit((data) =>
-    actions.run(
-      'save',
-      async () => {
-        await upsertArticleTranslationFn({
-          data: {
-            articleId,
-            locale,
-            title: data.title,
-            description: data.description.trim(),
-            content: data.content,
-            contentJson: contentJson as TiptapContent | null,
-          },
-        })
-        form.reset(data)
-      },
-      'Could not save the translation'
-    )
+    actions.run('save', () => saveText(data), 'Could not save the translation')
   )
   const handleKeyDown = useKeyboardSubmit(handleSubmit)
 
   const togglePublish = () =>
     actions.run(
       'status',
-      () =>
-        setArticleTranslationStatusFn({
+      async () => {
+        if (!(await saveEdits())) return
+        await setArticleTranslationStatusFn({
           data: { articleId, locale, status: status === 'published' ? 'draft' : 'published' },
-        }),
+        })
+      },
       'Could not update the translation status'
     )
 
@@ -196,6 +223,8 @@ function TranslationForm({
                 entry={entry}
                 aiAvailable={aiAvailable}
                 actions={actions}
+                dirty={dirty}
+                saveEdits={saveEdits}
                 onShowChanges={() => setChangesOpen(true)}
               />
             ) : null}
@@ -239,9 +268,7 @@ function TranslationForm({
               <>
                 <SidebarDivider />
                 <SidebarRow label="Translated from">
-                  <span className="text-sm">
-                    {own}, <TimeAgo date={updatedAt} locale="en" />
-                  </span>
+                  <span className="text-sm">{own}</span>
                 </SidebarRow>
                 <SidebarDivider />
                 <div className="flex justify-end">

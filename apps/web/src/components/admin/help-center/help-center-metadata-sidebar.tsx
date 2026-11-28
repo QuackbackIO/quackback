@@ -81,7 +81,7 @@ function SidebarContent({
       <SidebarDivider />
 
       <SidebarRow label="Category">
-        <div className="flex items-center gap-1.5">
+        <div className="flex min-w-0 items-center gap-1.5">
           <Select value={categoryId || undefined} onValueChange={onCategoryChange}>
             <SelectTrigger size="sm" className="flex-1 min-w-0">
               {/* Saving without a pick files the article under General. */}

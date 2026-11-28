@@ -19,6 +19,8 @@ export function TranslationStrip({
   entry,
   aiAvailable,
   actions,
+  dirty,
+  saveEdits,
   onShowChanges,
 }: {
   articleId: string
@@ -27,6 +29,10 @@ export function TranslationStrip({
   entry: ArticleLanguageEntry
   aiAvailable: boolean
   actions: LanguageActions
+  /** The form has edits that are not saved yet. */
+  dirty: boolean
+  /** Save the edits on screen; false when they do not pass the form's checks. */
+  saveEdits: () => Promise<boolean>
   onShowChanges: () => void
 }) {
   const pending = entry.pendingUpdate
@@ -67,8 +73,10 @@ export function TranslationStrip({
         text="An AI update is ready. Readers see the current text until you publish it."
       >
         <StripButton onClick={() => onShowChanges()}>Show changes</StripButton>
+        {/* Publishing the update replaces the text, edits on screen included. */}
         <StripButton
-          disabled={busy}
+          disabled={busy || dirty}
+          title={dirty ? 'Save your changes first' : undefined}
           onClick={() =>
             actions.run(
               'publish-update',
@@ -108,7 +116,10 @@ export function TranslationStrip({
           onClick={() =>
             actions.run(
               'mark-current',
-              () => markArticleTranslationCurrentFn({ data: { articleId, locale } }),
+              async () => {
+                if (!(await saveEdits())) return
+                await markArticleTranslationCurrentFn({ data: { articleId, locale } })
+              },
               'Could not mark the translation as up to date'
             )
           }
@@ -158,10 +169,12 @@ function Strip({
 function StripButton({
   onClick,
   disabled,
+  title,
   children,
 }: {
   onClick: () => void
   disabled?: boolean
+  title?: string
   children: React.ReactNode
 }) {
   return (
@@ -169,6 +182,7 @@ function StripButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
+      title={title}
       className="font-medium underline-offset-2 hover:underline disabled:opacity-60"
     >
       {children}

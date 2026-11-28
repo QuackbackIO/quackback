@@ -5,8 +5,7 @@ import { requestArticleAiTranslationFn } from '@/lib/server/functions/help-cente
 import { helpCenterKeys } from '@/lib/client/queries/help-center'
 import type { SupportedLocale } from '@/lib/shared/i18n'
 
-export const articleLanguagesKey = (articleId: string) =>
-  ['help-center', 'article-languages', articleId] as const
+export const articleLanguagesKey = helpCenterKeys.articleLanguages
 export const translationKey = (articleId: string, locale: string) =>
   ['help-center', 'article-translation', articleId, locale] as const
 /**

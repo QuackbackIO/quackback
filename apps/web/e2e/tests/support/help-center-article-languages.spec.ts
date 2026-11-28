@@ -120,14 +120,18 @@ test.describe('every language in the article editor', () => {
           await expect(changes.getByText('- Open Settings.')).toBeVisible()
           await snap(page, 'hc-editor-show-changes')
           await page.keyboard.press('Escape')
+          // Fix the text, then say it is up to date: the fix is saved, not lost.
+          const fixed = `Configurer votre compte (corrigé) ${marker}`
+          await page.getByLabel('Article title').last().fill(fixed)
           await page.getByRole('button', { name: 'Mark as up to date' }).click()
           await expect(
             page.getByText('The English article changed after this translation was made.')
           ).toHaveCount(0)
           await expect(bar.getByRole('tab', { name: /Français/ })).toHaveText('FrançaisPublished')
-          const [fr] = await sql`SELECT source_revision FROM kb_article_translations
+          await expect(page.getByLabel('Article title').last()).toHaveValue(fixed)
+          const [fr] = await sql`SELECT title, source_revision FROM kb_article_translations
             WHERE article_id = ${articleUuid} AND locale = 'fr'`
-          expect(fr.source_revision).toBe(2)
+          expect(fr).toMatchObject({ title: fixed, source_revision: 2 })
 
           // German has an AI update waiting; readers still see the live text.
           await bar.getByRole('tab', { name: /Deutsch/ }).click()
