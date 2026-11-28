@@ -169,10 +169,8 @@ export function describePlanRefusal(
 }
 
 export interface PlanRefusalFacts {
-  /** The plan feature refused, when the sentence names one this catalogue has. */
-  entitlement: EntitlementKey | null
-  /** Whether the feature's name takes a plural verb. */
-  plural: boolean
+  /** The feature the refusal names, in the server's English, when it names one. */
+  feature: string | null
   /** The plan that includes the feature, when the sentence names one. */
   requiredPlanName: string | null
 }
@@ -182,14 +180,10 @@ export interface PlanRefusalFacts {
  * server's sentence is English, so only the feature and the plan are read.
  */
 export function planRefusalFacts(error: unknown): PlanRefusalFacts {
-  const message = refusalMessage(error)
   const named =
     /^(.+?) (?:is|are) (?:an? \w+ feature|not (?:included|available) (?:in|on) your plan)\./.exec(
-      message
+      refusalMessage(error)
     )
-  const entry = named
-    ? Object.entries(ENTITLEMENTS).find(([, definition]) => definition.friendly === named[1])
-    : undefined
   const refusal = describePlanRefusal(error, {
     entitlement: null,
     feature: '',
@@ -198,11 +192,7 @@ export function planRefusalFacts(error: unknown): PlanRefusalFacts {
     headline: '',
     body: '',
   })
-  return {
-    entitlement: entry ? (entry[0] as EntitlementKey) : null,
-    plural: entry ? entry[1].plural : false,
-    requiredPlanName: refusal.requiredPlanName,
-  }
+  return { feature: named?.[1] ?? null, requiredPlanName: refusal.requiredPlanName }
 }
 
 /**

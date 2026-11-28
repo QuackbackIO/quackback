@@ -2,6 +2,8 @@
 import { describe, expect, it, afterEach, vi } from 'vitest'
 import { act, render, screen, cleanup } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
+import { ENTITLEMENTS } from '@/lib/server/domains/settings'
+import { PLAN_FEATURE_NAMES } from '../plan-refusal-copy'
 import pl from '@/locales/pl.json'
 import { withoutPageScopedMessages } from '@/lib/shared/i18n'
 import { DocumentLocaleContext } from '../document-locale-context'
@@ -259,5 +261,20 @@ describe('error pages in the reader’s language', () => {
   it('falls back to English when no IntlProvider is mounted', () => {
     render(<NotFoundPage />)
     expect(screen.getByText('Page not found')).toBeTruthy()
+  })
+})
+
+describe('plan feature names on the refusal page', () => {
+  it('names every plan feature the catalogue has, with its verb form', () => {
+    const catalogue = Object.fromEntries(
+      Object.values(ENTITLEMENTS).map((definition) => [definition.friendly, definition.plural])
+    )
+    const page = Object.fromEntries(
+      Object.entries(PLAN_FEATURE_NAMES).map(([english, entry]) => [english, entry.plural])
+    )
+    expect(page).toEqual(catalogue)
+    for (const [english, entry] of Object.entries(PLAN_FEATURE_NAMES)) {
+      expect(entry.name.defaultMessage).toBe(english)
+    }
   })
 })
