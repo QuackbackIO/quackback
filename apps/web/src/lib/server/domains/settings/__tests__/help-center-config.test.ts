@@ -73,7 +73,7 @@ describe('HelpCenterConfig', () => {
         headerLinks: [{ label: 'Community', url: 'https://community.example.com' }],
         domain: { domain: null, verifiedAt: null },
         locales: { default: 'en', additional: [], chrome: {} },
-        autoTranslate: { enabled: false, protectedTerms: [], fixedTranslations: {} },
+        autoTranslate: { enabled: false, protectedTerms: [] },
         seo: {
           metaDescription: 'Help center',
           sitemapEnabled: true,

@@ -1056,9 +1056,11 @@ export interface HelpCenterAutoTranslateConfig {
   protectedTerms: string[]
   /**
    * Words translated one fixed way, per language: { de: [{ term: 'Board',
-   * translation: 'Board' }] }. AI translation uses them as written.
+   * translation: 'Board' }] }. AI translation uses them as written. Absent
+   * until a workspace sets some, so the settings every page carries do not
+   * grow for workspaces that never use it.
    */
-  fixedTranslations: Record<string, GlossaryTranslation[]>
+  fixedTranslations?: Record<string, GlossaryTranslation[]>
 }
 
 /** A glossary word and the one way it is translated into a language. */
@@ -1070,7 +1072,6 @@ export interface GlossaryTranslation {
 export const DEFAULT_HELP_CENTER_AUTO_TRANSLATE_CONFIG: HelpCenterAutoTranslateConfig = {
   enabled: false,
   protectedTerms: [],
-  fixedTranslations: {},
 }
 
 /** An admin-configured link rendered in the portal header on help center pages. */
