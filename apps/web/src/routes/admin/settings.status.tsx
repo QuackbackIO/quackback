@@ -34,7 +34,7 @@ export const Route = createFileRoute('/admin/settings/status')({
       // The Notifications card's "Sent from" line, so it renders from the document.
       warmQuery(context.queryClient, surfaceSenderQuery('status')),
     ])
-    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminChannelSettings') }
+    return seedAdminAreas(context.personLocale, 'adminChannelSettings')
   },
   component: StatusSettingsPage,
 })

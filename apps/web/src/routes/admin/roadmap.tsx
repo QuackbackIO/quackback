@@ -82,7 +82,7 @@ export const Route = createFileRoute('/admin/roadmap')({
     }
 
     return {
-      seededAreas: await seedAdminAreas(context.personLocale, 'adminProduct'),
+      ...(await seedAdminAreas(context.personLocale, 'adminProduct')),
       currentUser: {
         name: user.name,
         email: user.email,

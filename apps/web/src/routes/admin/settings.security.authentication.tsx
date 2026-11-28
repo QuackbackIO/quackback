@@ -73,7 +73,7 @@ export const Route = createFileRoute('/admin/settings/security/authentication')(
     ])
 
     return {
-      seededAreas: await seedAdminAreas(context.personLocale, 'adminWorkspaceSettings'),
+      ...(await seedAdminAreas(context.personLocale, 'adminWorkspaceSettings')),
       tabs,
       ssoEntitled: entitlements.sso,
       ssoLive,

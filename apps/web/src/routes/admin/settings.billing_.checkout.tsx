@@ -22,7 +22,7 @@ export const Route = createFileRoute('/admin/settings/billing_/checkout')({
       context.queryClient.ensureQueryData(billingQueries.overview()),
       context.queryClient.ensureQueryData(billingQueries.catalogue()).catch(() => null),
     ])
-    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminWorkspaceSettings') }
+    return seedAdminAreas(context.personLocale, 'adminWorkspaceSettings')
   },
   component: CheckoutPage,
 })

@@ -32,7 +32,7 @@ export const Route = createFileRoute('/admin/settings/channels')({
       warmQuery(ensure, channels.emailStatus()),
       warmQuery(ensure, githubStatus()),
     ])
-    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminChannelSettings') }
+    return seedAdminAreas(context.personLocale, 'adminChannelSettings')
   },
   component: ChannelsHubPage,
 })

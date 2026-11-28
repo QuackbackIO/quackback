@@ -30,7 +30,7 @@ export const Route = createFileRoute('/admin/settings/security/sso_/new')({
     return {
       ssoEntitled,
       registrationId: newRegistrationId(),
-      seededAreas: await seedAdminAreas(context.personLocale, 'adminWorkspaceSettings'),
+      ...(await seedAdminAreas(context.personLocale, 'adminWorkspaceSettings')),
     }
   },
   component: SsoCreateRoute,

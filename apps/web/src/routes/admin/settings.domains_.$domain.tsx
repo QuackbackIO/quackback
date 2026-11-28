@@ -18,11 +18,11 @@ export const Route = createFileRoute('/admin/settings/domains_/$domain')({
   loader: async ({ context, params }) => {
     assertSettingsPageAccess(context.permissions, '/admin/settings/domains/$domain')
     const { loadDomainPage } = await import('@/lib/client/domain-page-loader')
-    const [page, seededAreas] = await Promise.all([
+    const [page, areaMessages] = await Promise.all([
       loadDomainPage(context, params.domain),
       seedAdminAreas(context.personLocale, 'adminWorkspaceSettings'),
     ])
-    return { ...page, seededAreas }
+    return { ...page, ...areaMessages }
   },
   component: DomainPage,
 })

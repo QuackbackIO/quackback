@@ -7,6 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { IntlProvider } from 'react-intl'
 import type { UseFormReturn } from 'react-hook-form'
 import type { ArticleId } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
@@ -73,7 +74,9 @@ function renderModal(onClose: () => void = () => {}) {
   const queryClient = new QueryClient()
   return render(
     <QueryClientProvider client={queryClient}>
-      <ArticleModalContent articleId={ARTICLE_ID} onClose={onClose} />
+      <IntlProvider locale="en" defaultLocale="en">
+        <ArticleModalContent articleId={ARTICLE_ID} onClose={onClose} />
+      </IntlProvider>
     </QueryClientProvider>
   )
 }

@@ -34,7 +34,7 @@ export const Route = createFileRoute('/admin/settings/macros')({
     ])
     return {
       macrosEntitled,
-      seededAreas: await seedAdminAreas(context.personLocale, 'adminChannelSettings'),
+      ...(await seedAdminAreas(context.personLocale, 'adminChannelSettings')),
     }
   },
   component: MacrosSettingsPage,

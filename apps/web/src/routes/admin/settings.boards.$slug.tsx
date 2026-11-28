@@ -55,7 +55,7 @@ export const Route = createFileRoute('/admin/settings/boards/$slug')({
     if (!boards.some((b) => b.slug === params.slug)) {
       throw redirect({ to: '/admin/settings/boards' })
     }
-    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminChannelSettings') }
+    return seedAdminAreas(context.personLocale, 'adminChannelSettings')
   },
   component: BoardSettingsPage,
 })

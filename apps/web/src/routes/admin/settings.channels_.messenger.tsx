@@ -20,7 +20,7 @@ export const Route = createFileRoute('/admin/settings/channels_/messenger')({
       ensure(settingsQueries.widgetConfig()),
       ensure(settingsQueries.portalConfig()),
     ])
-    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminChannelSettings') }
+    return seedAdminAreas(context.personLocale, 'adminChannelSettings')
   },
   component: MessengerChannelPage,
 })

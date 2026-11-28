@@ -23,7 +23,7 @@ export const Route = createFileRoute('/admin/settings/domains')({
     // The list rows only the domains the workspace owns, so it reads no section map.
     const summaries = await loadDomainSummaries({ ...context, sectionDomains: false })
     return {
-      seededAreas: await seedAdminAreas(context.personLocale, 'adminWorkspaceSettings'),
+      ...(await seedAdminAreas(context.personLocale, 'adminWorkspaceSettings')),
       ...summaries,
       links: domainUseLinks({ permissions: context.permissions ?? [] }),
     }

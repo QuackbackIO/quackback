@@ -52,13 +52,11 @@ export const Route = createFileRoute('/admin/settings/integrations/$type')({
       await import('@/components/admin/settings/integrations/integration-settings-registry')
     if (!getIntegrationSettingsEntry(type)) throw notFound()
     await context.queryClient.ensureQueryData(adminQueries.integrationByType(type))
-    return {
-      seededAreas: await seedAdminAreas(
-        context.personLocale,
-        'adminIntegrationSettings',
-        'adminIntegrationCatalog'
-      ),
-    }
+    return seedAdminAreas(
+      context.personLocale,
+      'adminIntegrationSettings',
+      'adminIntegrationCatalog'
+    )
   },
   component: IntegrationSettingsPage,
 })

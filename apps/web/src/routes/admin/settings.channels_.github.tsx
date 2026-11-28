@@ -21,7 +21,7 @@ export const Route = createFileRoute('/admin/settings/channels_/github')({
     const { githubChannelStatusQuery: githubStatus } =
       await import('@/integrations/github/ui/github-channel-status-query')
     await warmQuery(queryClient, githubStatus())
-    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminChannelSettings') }
+    return seedAdminAreas(context.personLocale, 'adminChannelSettings')
   },
   component: GitHubChannelPage,
 })

@@ -40,7 +40,7 @@ export const Route = createFileRoute('/admin/settings/connectors')({
       warmQuery(queryClient, assistantQueries.settings()),
       warmQuery(queryClient, assistantQueries.tools()),
     ])
-    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminAutomation') }
+    return seedAdminAreas(context.personLocale, 'adminAutomation')
   },
   errorComponent: ({ error, reset }) => (
     <DefaultErrorPage error={error} reset={reset} fullPage={false} />

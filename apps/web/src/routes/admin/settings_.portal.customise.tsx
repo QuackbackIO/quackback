@@ -49,7 +49,7 @@ export const Route = createFileRoute('/admin/settings_/portal/customise')({
       ensure(settingsQueries.headerLogo()),
       ...(helpCenter ? [ensure(settingsQueries.helpCenterConfig())] : []),
     ])
-    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminChannelSettings') }
+    return seedAdminAreas(context.personLocale, 'adminChannelSettings')
   },
   component: PortalCustomisePage,
 })

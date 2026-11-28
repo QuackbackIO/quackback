@@ -50,7 +50,7 @@ export const Route = createFileRoute('/admin/settings/general')({
     ])
     return {
       cloudIdentity,
-      seededAreas: await seedAdminAreas(context.personLocale, 'adminWorkspaceSettings'),
+      ...(await seedAdminAreas(context.personLocale, 'adminWorkspaceSettings')),
     }
   },
   component: GeneralSettingsPage,

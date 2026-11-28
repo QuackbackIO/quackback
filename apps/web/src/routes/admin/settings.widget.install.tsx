@@ -21,7 +21,7 @@ export const Route = createFileRoute('/admin/settings/widget/install')({
         ? ensure(adminQueries.onboardingStatus())
         : undefined,
     ])
-    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminChannelSettings') }
+    return seedAdminAreas(context.personLocale, 'adminChannelSettings')
   },
   component: WidgetInstallPage,
 })

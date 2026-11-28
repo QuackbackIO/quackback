@@ -29,7 +29,7 @@ export const Route = createFileRoute('/admin/settings/tags')({
         ? ensure(adminQueries.boards())
         : undefined,
     ])
-    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminChannelSettings') }
+    return seedAdminAreas(context.personLocale, 'adminChannelSettings')
   },
   component: TagsPage,
 })

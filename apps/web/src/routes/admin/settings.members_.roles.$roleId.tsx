@@ -14,7 +14,7 @@ export const Route = createFileRoute('/admin/settings/members_/roles/$roleId')({
   // The editor shows the role from the roles list.
   loader: async ({ context }) => {
     await context.queryClient.ensureQueryData(settingsQueries.roles())
-    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminWorkspaceSettings') }
+    return seedAdminAreas(context.personLocale, 'adminWorkspaceSettings')
   },
   component: RoleEditorPage,
 })

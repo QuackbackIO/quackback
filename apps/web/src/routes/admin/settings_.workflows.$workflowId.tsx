@@ -25,7 +25,7 @@ export const Route = createFileRoute('/admin/settings_/workflows/$workflowId')({
       context.queryClient.ensureQueryData(workflowDetailQuery(params.workflowId)),
       context.queryClient.ensureQueryData(settingsQueries.workflowAbandonedAutoClose()),
     ])
-    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminAutomation') }
+    return seedAdminAreas(context.personLocale, 'adminAutomation')
   },
   component: WorkflowBuilderPage,
 })

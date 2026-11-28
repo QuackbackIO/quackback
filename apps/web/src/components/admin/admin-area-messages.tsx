@@ -1,20 +1,19 @@
 /**
- * Hands each admin route the strings of its areas. A route's loader returns
- * `seededAreas` from `seedAdminAreas`, and this wraps the page the layout
+ * Hands each admin route the strings of its areas. A route's loader spreads
+ * `seedAdminAreas` into its data (`areaMessages`), and this wraps the page the layout
  * renders, so the route and everything inside it read them; the shell around
  * it (rail, menus, the entity modals) never does. See `AREA_MESSAGE_PREFIXES`.
  */
 import { useMemo, type ReactNode } from 'react'
 import { IntlProvider, useIntl } from 'react-intl'
 import { useMatches } from '@tanstack/react-router'
-import type { SeededAdminAreas } from '@/lib/shared/i18n'
 
 /** The strings every matched route seeded, merged; empty when none did. */
 export function mergeSeededAreas(loaderData: readonly unknown[]): Record<string, string> {
   const merged: Record<string, string> = {}
   for (const data of loaderData) {
-    const seeded = (data as { seededAreas?: SeededAdminAreas } | undefined)?.seededAreas
-    if (seeded) Object.assign(merged, seeded.messages)
+    const seeded = (data as { areaMessages?: Record<string, string> } | undefined)?.areaMessages
+    if (seeded) Object.assign(merged, seeded)
   }
   return merged
 }

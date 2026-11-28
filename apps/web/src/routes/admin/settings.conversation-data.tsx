@@ -26,7 +26,7 @@ export const Route = createFileRoute('/admin/settings/conversation-data')({
   loader: async ({ context }) => {
     assertSettingsPageAccess(context.permissions, '/admin/settings/conversation-data')
     await context.queryClient.ensureQueryData(conversationAttributeQueries.registry())
-    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminIntegrationSettings') }
+    return seedAdminAreas(context.personLocale, 'adminIntegrationSettings')
   },
   component: ConversationDataPage,
 })

@@ -416,27 +416,19 @@ export async function seedAreaMessages(
   return locale === DEFAULT_LOCALE ? {} : loadAreaMessages(locale, area)
 }
 
-/** The strings an admin route's loader seeds for its areas (`AdminAreaMessages`). */
-export interface SeededAdminAreas {
-  areas: MessageArea[]
-  messages: Record<string, string>
-}
-
 /**
- * The strings of an admin route's areas in the admin's language (the route
- * context's `personLocale`, English without one), for its loader to return as
- * `seededAreas`. The admin layout hands them to everything the route renders.
- * None in English, which renders from the code.
+ * What an admin route's loader returns for its areas, spread into its data:
+ * the areas' strings in the admin's language (the route context's
+ * `personLocale`) as `areaMessages`, which the admin layout hands to
+ * everything the route renders (`AdminAreaMessages`). Nothing in English,
+ * which renders from the code, so an English page's data is unchanged.
  */
 export async function seedAdminAreas(
   locale: SupportedLocale | undefined,
   ...areas: MessageArea[]
-): Promise<SeededAdminAreas> {
-  const resolved = locale ?? DEFAULT_LOCALE
-  return {
-    areas,
-    messages: resolved === DEFAULT_LOCALE ? {} : await loadAreaMessages(resolved, ...areas),
-  }
+): Promise<{ areaMessages?: Record<string, string> }> {
+  if (!locale || locale === DEFAULT_LOCALE) return {}
+  return { areaMessages: await loadAreaMessages(locale, ...areas) }
 }
 
 /** The file viewer's strings in a locale. */

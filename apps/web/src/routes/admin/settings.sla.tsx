@@ -85,7 +85,7 @@ export const Route = createFileRoute('/admin/settings/sla')({
       // The policies' office-hours note reads these on first paint.
       warmQuery(context.queryClient, slaOfficeHoursQuery),
     ])
-    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminChannelSettings') }
+    return seedAdminAreas(context.personLocale, 'adminChannelSettings')
   },
   component: SlaSettingsPage,
 })

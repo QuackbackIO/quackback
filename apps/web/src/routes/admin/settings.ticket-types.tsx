@@ -18,7 +18,7 @@ export const Route = createFileRoute('/admin/settings/ticket-types')({
   loader: async ({ context }) => {
     assertSettingsPageAccess(context.permissions, '/admin/settings/ticket-types')
     await context.queryClient.ensureQueryData(ticketTypesQuery)
-    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminChannelSettings') }
+    return seedAdminAreas(context.personLocale, 'adminChannelSettings')
   },
   component: TicketTypesPage,
 })

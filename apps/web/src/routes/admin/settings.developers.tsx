@@ -76,7 +76,7 @@ export const Route = createFileRoute('/admin/settings/developers')({
     return {
       webhooksEntitled: entitlements.webhooks,
       mcpEntitled: entitlements.mcpServer,
-      seededAreas: await seedAdminAreas(context.personLocale, 'adminIntegrationSettings'),
+      ...(await seedAdminAreas(context.personLocale, 'adminIntegrationSettings')),
     }
   },
   component: ApiPage,

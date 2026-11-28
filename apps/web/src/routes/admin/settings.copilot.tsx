@@ -41,7 +41,7 @@ export const Route = createFileRoute('/admin/settings/copilot')({
   },
   loader: async ({ context }) => {
     await context.queryClient.ensureQueryData(assistantQueries.settings())
-    return { seededAreas: await seedAdminAreas(context.personLocale, 'adminAutomation') }
+    return seedAdminAreas(context.personLocale, 'adminAutomation')
   },
   errorComponent: ({ error, reset }) => (
     <DefaultErrorPage error={error} reset={reset} fullPage={false} />
