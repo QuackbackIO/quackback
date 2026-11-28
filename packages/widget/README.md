@@ -147,7 +147,7 @@ Theme colors and tab visibility come from your Quackback admin (Admin → Settin
 
 The widget picks its language in this order: the `locale` you pass, the language the identified person chose in their Quackback preferences, the workspace's main language when the workspace shows it to every visitor, the visitor's browser language, then the workspace's main language.
 
-Pass `locale` only when it is each user's own language in your app, for example from their profile or your page's `lang`. Then the widget matches the app around it, and Quackback records it as an identified person's language for emails. If your app has one fixed language for everyone, leave `locale` out: a fixed value would hide each visitor's browser language and the language they chose in Quackback.
+Pass `locale` only when it is each user's own language in your app, for example from their profile or your page's `lang`. Then the widget matches the app around it, and Quackback records it as an identified person's detected language. Emails use it when the person has not chosen a language and the workspace does not show its main language to everyone. If your app has one fixed language for everyone, leave `locale` out: a fixed value would hide each visitor's browser language and the language they chose in Quackback.
 
 ```ts
 Quackback.init({ instanceUrl, locale: currentUser.locale }) // each user's own language, or leave it out

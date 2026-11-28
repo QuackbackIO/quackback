@@ -200,6 +200,22 @@ describe('the languages settings area', () => {
     })
   })
 
+  it('refuses a swap and a new extra languages list in one change, which would drop the old main language', async () => {
+    const FR_LABELS = { ...DE_LABELS, language: 'fr', homepageTitle: 'Bonjour' }
+    await change({ extraLanguages: ['de', 'fr'], pageLabels: [DE_LABELS, FR_LABELS] })
+    await expect(change({ mainLanguage: 'de', extraLanguages: ['fr'] })).rejects.toMatchObject({
+      code: 'MAIN_LANGUAGE_SWAP_WITH_EXTRAS',
+    })
+    expect((await readSettingsArea(actor, 'languages')).value).toMatchObject({
+      mainLanguage: 'en',
+      extraLanguages: ['de', 'fr'],
+    })
+    // Sent unchanged, the main language is no swap, and the list applies.
+    await expect(change({ mainLanguage: 'en', extraLanguages: ['fr'] })).resolves.toMatchObject({
+      status: 'applied',
+    })
+  })
+
   it('needs the help center permission for the help center fields only', async () => {
     const settingsOnly: SettingsCaller = {
       actor: {

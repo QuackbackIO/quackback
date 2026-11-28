@@ -58,6 +58,23 @@ function chromeOf(labels: PageLabels): HelpCenterLocaleChromeStrings {
 export async function writeLanguagesArea(tx: Transaction, input: LanguagesPatch): Promise<void> {
   const patch = languagesPatchSchema.parse(input)
   const options = { executor: tx }
+  if (patch.mainLanguage !== undefined && patch.extraLanguages !== undefined) {
+    // A swap makes the old main language an extra one. An extra languages list
+    // written against the old main language would silently drop it, so a swap
+    // and a new list are two separate changes.
+    const before = languagesAreaValues(await requireSettings(tx)) as {
+      mainLanguage: string
+      extraLanguages: string[]
+    }
+    if (
+      patch.mainLanguage !== before.mainLanguage &&
+      before.extraLanguages.includes(patch.mainLanguage)
+    )
+      throw new ValidationError(
+        'MAIN_LANGUAGE_SWAP_WITH_EXTRAS',
+        `Making ${patch.mainLanguage} the main language makes ${before.mainLanguage} an extra language. Change the main language on its own, then change the extra languages`
+      )
+  }
   if (patch.mainLanguage !== undefined || patch.visitorLanguage !== undefined) {
     await updateLanguageConfig(
       {
