@@ -174,6 +174,89 @@ test.describe('help center translations through the API', () => {
   )
 
   test(
+    'API-HC-L3 with Translate automatically on, an article change brings an update waiting for review and a draft for a missing language',
+    { tag: ['@core', '@isolated'] },
+    async ({ playwright, baseURL, people, marker }) => {
+      const { articleId } = await seedArticle(marker)
+      const articleUuid = toUuid(articleId)
+      const sql = supportDb()
+      await fakeAi.script({
+        marker,
+        json: {
+          title: `Automatisch ${marker}`,
+          description: '',
+          content: 'Öffne Einstellungen, dann Konto, dann Speichern.',
+        },
+      })
+      const api = await hooksApi(playwright, baseURL, people, marker)
+      try {
+        await withSettings(
+          {
+            feature_flags: { helpCenter: true },
+            help_center_config: {
+              'locales.additional': ['de', 'fr'],
+              'autoTranslate.enabled': true,
+            },
+          },
+          async () => {
+            const base = `/api/v1/help-center/articles/${articleId}`
+            const put = await api.put(`${base}/translations/de`, {
+              data: {
+                title: `Konto einrichten ${marker}`,
+                content: 'Öffne Einstellungen.',
+                status: 'published',
+              },
+            })
+            expect(put.status(), await put.text()).toBe(200)
+
+            // The article's text changes; nobody asks for a translation.
+            const patch = await api.patch(base, {
+              data: { content: 'Open Settings, then Account, then Save.' },
+            })
+            expect(patch.status(), await patch.text()).toBe(200)
+
+            // German: an update waits beside the live text, which does not change.
+            await expect
+              .poll(
+                async () => {
+                  const [de] = await sql`SELECT pending_title FROM kb_article_translations
+                    WHERE article_id = ${articleUuid} AND locale = 'de'`
+                  return de?.pending_title ?? null
+                },
+                { timeout: 45_000 }
+              )
+              .toBe(`Automatisch ${marker}`)
+            const [de] = await sql`SELECT title, status, source_revision, pending_source_revision,
+                check_result FROM kb_article_translations
+              WHERE article_id = ${articleUuid} AND locale = 'de'`
+            expect(de).toMatchObject({
+              title: `Konto einrichten ${marker}`,
+              status: 'published',
+              source_revision: 1,
+              pending_source_revision: 2,
+            })
+            expect(de.check_result).toMatchObject({ ok: true })
+
+            // French had no version: it gets a draft, not a published page.
+            await expect
+              .poll(
+                async () => {
+                  const [fr] = await sql`SELECT status FROM kb_article_translations
+                    WHERE article_id = ${articleUuid} AND locale = 'fr'`
+                  return fr?.status ?? null
+                },
+                { timeout: 45_000 }
+              )
+              .toBe('draft')
+          }
+        )
+      } finally {
+        await fakeAi.clear(marker)
+      }
+    }
+  )
+
+  test(
     'API-HC-L2 MCP translates an article, reads it in a language, and names a collection',
     { tag: ['@core', '@isolated'] },
     async ({ playwright, baseURL, people, marker }) => {
