@@ -287,12 +287,12 @@ test.describe('portal tickets: the widget Tickets tab', () => {
       await moveTicket(admin, ticket.id, 'Investigating')
       await page.reload()
       ;({ widget } = await identifiedWidget(page, request, customerEmail, marker))
-      await expect(widget.getByRole('button', { name: '1 unread Tickets' })).toBeVisible({
+      await expect(widget.getByRole('button', { name: '1 ticket updated Tickets' })).toBeVisible({
         timeout: 20_000,
       })
       await widgetTab(widget, 'Tickets').click()
       await expect(widget.getByText('Status changed since your last visit')).toBeVisible()
-      await expect(widget.getByRole('button', { name: /unread Tickets/ })).toHaveCount(0, {
+      await expect(widget.getByRole('button', { name: /updated Tickets/ })).toHaveCount(0, {
         timeout: 15_000,
       })
       await admin.dispose()

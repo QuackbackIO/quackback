@@ -1258,7 +1258,9 @@ test.describe('who the email speaks as', () => {
       await pollFor('the reply in email_log', async () =>
         (await outbound()).length > 0 ? true : null
       )
-      expect((await outbound()).map((r) => r.address)).toEqual([owner.email])
+      // The owner also gets the new-conversation alert a test thread sends its
+      // owner, so every outbound row is addressed to them and to no one else.
+      expect(new Set((await outbound()).map((r) => r.address))).toEqual(new Set([owner.email]))
     }
   )
 })
