@@ -12,6 +12,7 @@ import type { HelpCenterStatusFilter } from './use-help-center-filters'
 import type { CategoryActions, TreeCategory } from './help-center-category-tree'
 import { useDeleteArticle, useDeleteCategory } from '@/lib/client/mutations/help-center'
 import { helpCenterQueries } from '@/lib/client/queries/help-center'
+import { settingsQueries } from '@/lib/client/queries/settings'
 import { collectDescendantIds } from '@/lib/shared/help-center-tree'
 import { Route } from '@/routes/admin/help-center'
 import type { KbArticleId, KbCategoryId } from '@quackback/ids'
@@ -33,6 +34,8 @@ export function HelpCenterList() {
   const deleteCategoryMutation = useDeleteCategory()
 
   const { data: allCategories = [] } = useQuery(helpCenterQueries.categories())
+  const { data: helpCenterConfig } = useQuery(settingsQueries.helpCenterConfig())
+  const hasExtraLanguages = (helpCenterConfig?.locales.additional.length ?? 0) > 0
 
   // Keyboard "/" to focus search
   useEffect(() => {
@@ -149,6 +152,10 @@ export function HelpCenterList() {
             showPerformance={filters.showPerformance}
             onShowPerformanceChange={(showPerformance) =>
               setFilters({ showPerformance: showPerformance ?? undefined })
+            }
+            languages={filters.languages}
+            onLanguagesChange={
+              hasExtraLanguages ? (languages) => setFilters({ languages }) : undefined
             }
           />
         }

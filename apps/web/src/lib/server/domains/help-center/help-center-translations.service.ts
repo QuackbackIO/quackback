@@ -98,6 +98,8 @@ export interface UpsertArticleTranslationInput {
    * the article when not given. An existing translation keeps its own.
    */
   source?: { revision: number; text: TranslationSourceText }
+  /** The publish state to set; left as it is (draft for a new one) when not given. */
+  status?: 'draft' | 'published'
   /** The checks on an AI draft (auto-translate's write only). */
   checkResult?: TranslationCheckResult | null
 }
@@ -141,12 +143,11 @@ export async function getPublishedArticleTranslation(
 }
 
 /**
- * Create-or-update a translation; a fresh one always starts as a draft. A
- * manual write (the default) is a saved draft: it also takes a published
- * translation back to draft, so the edit is not live until it is published
- * again. It also drops pending auto-translate jobs for that locale, so a job
- * parked at the AI allowance can never later replace it. Auto-translate
- * passes `source: 'auto'` and leaves the status as it is.
+ * Create-or-update a translation. A fresh one starts as a draft unless a
+ * status is given; saving an existing one keeps its publish state, as saving
+ * the main article does, unless a status is given. A manual write (the
+ * default) also drops pending auto-translate jobs for that locale, so a job
+ * parked at the AI allowance can never later act on it.
  */
 export async function upsertArticleTranslation(
   input: UpsertArticleTranslationInput,
@@ -168,6 +169,7 @@ export async function upsertArticleTranslation(
       contentJson,
       sourceRevision: source.revision,
       sourceText: source.text,
+      ...(input.status ? { status: input.status } : {}),
     })
     .onConflictDoUpdate({
       target: [helpCenterArticleTranslations.articleId, helpCenterArticleTranslations.locale],
@@ -176,7 +178,7 @@ export async function upsertArticleTranslation(
         description: input.description ?? null,
         content: input.content,
         contentJson,
-        ...(manual ? { status: 'draft' as const } : {}),
+        ...(input.status ? { status: input.status } : {}),
         // A person's edit is no longer the AI draft the checks were about. A
         // waiting update keeps its own result.
         ...(manual

@@ -11,6 +11,7 @@ export interface HelpCenterFilters {
   sort: 'newest' | 'oldest'
   showDeleted?: boolean
   showPerformance?: boolean
+  languages?: 'needs_update' | 'missing'
 }
 
 export function useHelpCenterFilters() {
@@ -25,8 +26,17 @@ export function useHelpCenterFilters() {
       sort: search.sort ?? 'newest',
       showDeleted: search.deleted,
       showPerformance: search.performance,
+      languages: search.languages,
     }),
-    [search.status, search.category, search.search, search.sort, search.deleted, search.performance]
+    [
+      search.status,
+      search.category,
+      search.search,
+      search.sort,
+      search.deleted,
+      search.performance,
+      search.languages,
+    ]
   )
 
   const setFilters = useCallback(
@@ -47,6 +57,7 @@ export function useHelpCenterFilters() {
           ...('sort' in updates && {
             sort: updates.sort === 'newest' ? undefined : updates.sort,
           }),
+          ...('languages' in updates && { languages: updates.languages || undefined }),
           ...('showDeleted' in updates && {
             deleted: updates.showDeleted || undefined,
             // Deleted items and the performance table are alternate full-page
@@ -76,6 +87,7 @@ export function useHelpCenterFilters() {
     return (
       filters.status !== 'all' ||
       !!filters.search ||
+      !!filters.languages ||
       !!filters.showDeleted ||
       !!filters.showPerformance ||
       !!filters.category

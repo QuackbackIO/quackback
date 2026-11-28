@@ -106,6 +106,7 @@ const draft: HelpCenterArticleWithCategory = {
   categoryId: 'kb_category_1' as KbCategoryId,
   slug: 'secret',
   locale: 'en',
+  textRevision: 1,
   title: 'Secret plan',
   description: null,
   position: null,

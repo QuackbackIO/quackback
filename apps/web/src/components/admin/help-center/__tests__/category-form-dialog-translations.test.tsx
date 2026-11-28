@@ -1,12 +1,12 @@
 // @vitest-environment happy-dom
 /**
- * The collection editor's Translations section offers the languages the
- * server lists for the collection: the help center's languages less the one
- * its own name is in. A collection left in an old main language gets the main
- * language, and never its own.
+ * The collection editor's language bar offers the languages the server lists
+ * for the collection: the help center's languages less the one its own name
+ * is in. A collection left in an old main language gets the main language,
+ * and never its own. Each language shows whether it has a name yet.
  */
 import '@testing-library/jest-dom/vitest'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
@@ -43,9 +43,11 @@ vi.mock('@/components/ui/select', () => ({
 vi.mock('@/lib/server/functions/help-center-translations', () => ({
   getCategoryTranslationStatusesFn: vi.fn(async () => [
     { locale: 'de', status: 'untranslated', updatedAt: null },
-    { locale: 'fr', status: 'untranslated', updatedAt: null },
+    { locale: 'fr', status: 'translated', updatedAt: null },
   ]),
-  listCategoryTranslationsFn: vi.fn(async () => []),
+  listCategoryTranslationsFn: vi.fn(async () => [
+    { locale: 'fr', name: 'Compte', description: null },
+  ]),
   upsertCategoryTranslationFn: vi.fn(),
   deleteCategoryTranslationFn: vi.fn(),
 }))
@@ -78,8 +80,15 @@ it('offers the main language and not its own to a collection left in an old main
     </QueryClientProvider>
   )
 
-  const label = await screen.findByText('Translations')
-  const select = label.parentElement!.querySelector('select')!
-  await waitFor(() => expect(select).toHaveValue('de'))
-  expect([...select.options].map((o) => o.textContent)).toEqual(['Deutsch', 'Français'])
+  const bar = await screen.findByRole('tablist', { name: 'Collection languages' })
+  const tabs = [...bar.querySelectorAll('[role="tab"]')]
+  expect(tabs.map((t) => t.textContent)).toEqual(['Deutsch', 'Français'])
+  expect(tabs.map((t) => t.querySelector('[data-state]')?.getAttribute('data-state'))).toEqual([
+    'missing',
+    'published',
+  ])
+  await waitFor(() => expect(tabs[0]).toHaveAttribute('aria-selected', 'true'))
+
+  fireEvent.click(tabs[1])
+  await waitFor(() => expect(screen.getByLabelText('Name in Français')).toHaveValue('Compte'))
 })

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { PlusIcon } from '@heroicons/react/24/solid'
-import { HandThumbDownIcon, LanguageIcon } from '@heroicons/react/24/outline'
+import { HandThumbDownIcon } from '@heroicons/react/24/outline'
 import { CategoryIcon } from '@/components/help-center/category-icon'
 import { ArticleAudienceControl } from '@/components/admin/help-center/article-audience-control'
 import { Badge } from '@/components/ui/badge'
@@ -33,7 +33,8 @@ interface HelpCenterMetadataSidebarProps {
   onSegmentIdsChange?: (ids: string[]) => void
   notHelpfulCount?: number
   onOpenFeedback?: () => void
-  onOpenTranslations?: () => void
+  /** "1 published · 1 needs update": the article's other languages. */
+  languagesSummary?: string
   publishPending?: boolean
 }
 
@@ -48,7 +49,7 @@ function SidebarContent({
   onSegmentIdsChange,
   notHelpfulCount,
   onOpenFeedback,
-  onOpenTranslations,
+  languagesSummary,
   publishPending,
 }: HelpCenterMetadataSidebarProps) {
   const [createCategoryOpen, setCreateCategoryOpen] = useState(false)
@@ -136,14 +137,11 @@ function SidebarContent({
         </>
       ) : null}
 
-      {onOpenTranslations ? (
+      {languagesSummary ? (
         <>
           <SidebarDivider />
-          <SidebarRow label="Translations">
-            <Button type="button" variant="ghost" size="sm" onClick={onOpenTranslations}>
-              <LanguageIcon className="h-3.5 w-3.5" />
-              Manage
-            </Button>
+          <SidebarRow label="Languages">
+            <span className="text-sm text-foreground">{languagesSummary}</span>
           </SidebarRow>
         </>
       ) : null}

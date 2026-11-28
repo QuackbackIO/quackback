@@ -173,7 +173,7 @@ describe('article translations', () => {
     expect(set.contentJson).toEqual(inserted.contentJson)
   })
 
-  it('a person saving a draft takes a published translation back to draft', async () => {
+  it('saving keeps the publish state unless one is given', async () => {
     await upsertArticleTranslation({
       articleId: 'article_1' as KbArticleId,
       locale: 'de',
@@ -181,7 +181,18 @@ describe('article translations', () => {
       content: 'Inhalt',
     })
     const [{ set }] = onConflictCalls[0] as [{ set: Record<string, unknown> }]
-    expect(set.status).toBe('draft')
+    expect(set).not.toHaveProperty('status')
+
+    await upsertArticleTranslation({
+      articleId: 'article_1' as KbArticleId,
+      locale: 'de',
+      title: 'Entwurf',
+      content: 'Inhalt',
+      status: 'published',
+    })
+    const [{ set: withStatus }] = onConflictCalls[1] as [{ set: Record<string, unknown> }]
+    expect(withStatus.status).toBe('published')
+    expect((insertValuesCalls[1] as [Record<string, unknown>])[0].status).toBe('published')
   })
 
   it('an auto-translate write leaves the status as it is', async () => {

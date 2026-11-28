@@ -68,6 +68,7 @@ export const helpCenterQueries = {
     search?: string
     sort?: 'newest' | 'oldest'
     showDeleted?: boolean
+    languages?: 'needs_update' | 'missing'
   }) =>
     infiniteQueryOptions({
       queryKey: helpCenterKeys.articleList(params),
@@ -81,6 +82,7 @@ export const helpCenterQueries = {
             cursor: pageParam,
             limit: 20,
             showDeleted: params.showDeleted,
+            languages: params.languages,
           },
         }),
       initialPageParam: undefined as string | undefined,

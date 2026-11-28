@@ -79,6 +79,8 @@ export interface HelpCenterArticle {
   urlId: number
   /** The language the title, description and body are in. */
   locale: string
+  /** Counts changes to the title, description and body (see kb_articles.text_revision). */
+  textRevision: number
   createdAt: Date
   updatedAt: Date
   deletedAt?: Date | null

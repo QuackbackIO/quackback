@@ -94,6 +94,8 @@ export const listArticlesSchema = z.object({
   limit: PageLimitSchema,
   showDeleted: z.boolean().optional(),
   sort: z.enum(['newest', 'oldest']).optional(),
+  /** Articles with a language behind its article, or with a language missing. */
+  languages: z.enum(['needs_update', 'missing']).optional(),
 })
 
 export const listPublicArticlesSchema = z.object({
@@ -209,9 +211,18 @@ export const updateHelpCenterSeoSchema = z.object({
 // Auto-translate Schema (domains/languages §H3)
 // ============================================================================
 
+const glossaryEntrySchema = z.object({
+  term: z.string().trim().min(1).max(100),
+  translation: z.string().trim().min(1).max(100),
+})
+
 export const updateHelpCenterAutoTranslateSchema = z.object({
   enabled: z.boolean().optional(),
   protectedTerms: z.array(z.string().min(1).max(100)).max(100).optional(),
+  /** Per language; a language sent replaces its list, others stay. */
+  fixedTranslations: z
+    .partialRecord(z.enum(SUPPORTED_LOCALES), z.array(glossaryEntrySchema).max(100))
+    .optional(),
 })
 
 // ============================================================================
@@ -266,6 +277,13 @@ export const upsertArticleTranslationSchema = z.object({
   description: z.string().max(300).optional(),
   content: z.string(),
   contentJson: tiptapContentSchema.nullable().optional(),
+  status: z.enum(['draft', 'published']).optional(),
+})
+
+/** One language of one article, for the editor's translation actions. */
+export const articleTranslationLocaleSchema = z.object({
+  articleId: z.string().min(1),
+  locale: supportedLocaleSchema,
 })
 
 export const setArticleTranslationStatusSchema = z.object({

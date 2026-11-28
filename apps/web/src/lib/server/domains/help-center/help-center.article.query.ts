@@ -64,6 +64,7 @@ const LIST_COLUMNS = {
   title: true,
   description: true,
   locale: true,
+  textRevision: true,
   position: true,
   content: true,
   principalId: true,
@@ -77,6 +78,16 @@ const LIST_COLUMNS = {
   deletedAt: true,
 } as const
 
+/** The "Languages" filter over the help center's languages. */
+async function languageFilter(filter: 'needs_update' | 'missing') {
+  const [{ getHelpCenterConfig }, { articleLanguageFilterCondition }] = await Promise.all([
+    import('@/lib/server/domains/settings/settings.service'),
+    import('./help-center-translation-list'),
+  ])
+  const { locales } = await getHelpCenterConfig()
+  return articleLanguageFilterCondition(filter, [locales.default, ...locales.additional])
+}
+
 export async function listArticles(
   params: ListArticlesParams,
   scope: ArticleListScope = {}
@@ -89,6 +100,7 @@ export async function listArticles(
     limit = 20,
     showDeleted = false,
     sort = 'newest',
+    languages,
   } = params
   const audience = scope.audience ?? 'team'
   const viewer = scope.viewer ?? ANONYMOUS_ACTOR
@@ -100,7 +112,7 @@ export async function listArticles(
   // The trash view keeps the plain keyword filter below: soft-deleted rows
   // are excluded from ranking by design.
   const searchTerm = search?.trim()
-  if (searchTerm && !showDeleted && scope.searchMode !== 'keyword') {
+  if (searchTerm && !showDeleted && !languages && scope.searchMode !== 'keyword') {
     return listArticlesRanked(searchTerm, { categoryId, status, cursor, limit, audience, viewer })
   }
 
@@ -132,6 +144,8 @@ export async function listArticles(
       conditions.push(isNull(helpCenterArticles.publishedAt))
     }
   }
+
+  if (languages) conditions.push(await languageFilter(languages))
 
   if (search?.trim()) {
     conditions.push(
