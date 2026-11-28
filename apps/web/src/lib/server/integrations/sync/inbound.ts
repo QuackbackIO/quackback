@@ -175,7 +175,8 @@ export async function applyInboundStatus(
       op.sourceId as PostId,
       resolveStatusMapping(
         result.externalStatus,
-        config.statusMappings as StatusMappings | undefined
+        config.statusMappings as StatusMappings | undefined,
+        result.fallbackStatus
       ),
       integration.principalId,
       external
@@ -188,7 +189,8 @@ export async function applyInboundStatus(
       op.sourceId as TicketId,
       resolveTicketStatusMapping(
         result.externalStatus,
-        config.ticketStatusMappings as StatusMappings | undefined
+        config.ticketStatusMappings as StatusMappings | undefined,
+        result.fallbackStatus
       ),
       integration.principalId,
       external,

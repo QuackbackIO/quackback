@@ -7,6 +7,7 @@ import { integrationFetch } from '@/lib/server/integrations/sync/transport'
 import type { IssueTrackerCapability, ParsedIssueRef } from '@/lib/server/integrations/types'
 import { issueError } from '@/lib/server/integrations/message-utils'
 import { ValidationError } from '@/lib/shared/errors'
+import { buildGitHubTicketIssue } from '@/integrations/github/server/ticket-issue'
 
 const GITHUB_API = 'https://api.github.com'
 
@@ -55,36 +56,53 @@ export const githubIssues: IssueTrackerCapability = {
       version: issue.updated_at,
     }
   },
-  parseRef(input: string, config: Record<string, unknown>): ParsedIssueRef | null {
+  parseRef(input, config, destinations): ParsedIssueRef | null {
     const trimmed = input.trim()
     const m = ISSUE_URL_RE.exec(trimmed) ?? ISSUE_SHORTHAND_RE.exec(trimmed)
     if (!m) return null
     const number = Number.parseInt(m[3], 10)
     if (!Number.isSafeInteger(number) || number <= 0) return null
 
-    // channelId holds the connected "owner/repo" (see GitHubTarget in hook.ts).
-    // Only enforce when it has that shape: inbound webhooks reverse-look-up by
-    // bare issue number, so a foreign repo's numbers would collide.
+    // Inbound webhooks reverse-look-up by bare issue number within a
+    // repository, so a reference must belong to a repository this connection
+    // syncs: one of its configured repositories when it has several, else the
+    // "owner/repo" in channelId (see GitHubTarget in hook.ts), enforced only
+    // when it has that shape.
     const issueRepo = `${m[1]}/${m[2]}`
-    const configuredRepo =
-      typeof config.channelId === 'string' && config.channelId.includes('/')
-        ? config.channelId
-        : null
-    if (configuredRepo && configuredRepo.toLowerCase() !== issueRepo.toLowerCase()) {
-      throw new ValidationError(
-        'REPO_MISMATCH',
-        `Issue must belong to the connected repository (${configuredRepo})`
-      )
+    let destinationId: string | undefined
+    if (destinations?.length) {
+      const match = destinations.find((d) => d.externalId.toLowerCase() === issueRepo.toLowerCase())
+      if (!match) {
+        throw new ValidationError(
+          'REPO_MISMATCH',
+          `Issue must belong to a connected repository (${destinations.map((d) => d.externalId).join(', ')})`
+        )
+      }
+      destinationId = match.id
+    } else {
+      const configuredRepo =
+        typeof config.channelId === 'string' && config.channelId.includes('/')
+          ? config.channelId
+          : null
+      if (configuredRepo && configuredRepo.toLowerCase() !== issueRepo.toLowerCase()) {
+        throw new ValidationError(
+          'REPO_MISMATCH',
+          `Issue must belong to the connected repository (${configuredRepo})`
+        )
+      }
     }
 
     return {
       externalId: String(number),
       externalDisplayId: `${issueRepo}#${number}`,
       externalUrl: `https://github.com/${issueRepo}/issues/${number}`,
+      ...(destinationId ? { destinationId } : {}),
     }
   },
 
-  async create({ auth, title, bodyMarkdown }): Promise<ParsedIssueRef> {
+  formatTicketIssue: buildGitHubTicketIssue,
+
+  async create({ auth, title, bodyMarkdown, labels }): Promise<ParsedIssueRef> {
     const ownerRepo = auth.channelId as string
     const accessToken = auth.accessToken as string
 
@@ -97,7 +115,9 @@ export const githubIssues: IssueTrackerCapability = {
         'User-Agent': 'quackback',
         'X-GitHub-Api-Version': '2022-11-28',
       },
-      body: JSON.stringify({ title, body: bodyMarkdown }),
+      // GitHub adds a label the repository does not have yet, and drops the
+      // labels a token without push access may not set instead of refusing.
+      body: JSON.stringify({ title, body: bodyMarkdown, ...(labels?.length ? { labels } : {}) }),
     })
 
     if (!response.ok) {

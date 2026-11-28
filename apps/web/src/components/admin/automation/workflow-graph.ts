@@ -727,7 +727,10 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   // Ticket actions (ticket-actions extension) — see action.executor.ts's
   // module doc for the resolve-the-linked-ticket policy both share.
   set_ticket_status: 'Set ticket status',
+  set_ticket_due_date: 'Set ticket due date',
   convert_to_ticket: 'Convert to ticket',
+  // A teammate who can see the linked ticket starts watching it.
+  add_ticket_watcher: 'Add ticket watcher',
   // Outbound POST of the event payload to a URL — see action.executor.ts's
   // `send_webhook` doc for the delivery + SSRF-guard policy.
   send_webhook: 'Send webhook',
@@ -775,6 +778,9 @@ export const TRIGGER_LABELS: Record<TriggerType, string> = {
   'sla.breached': 'SLA breached',
   'ticket.created': 'Ticket created',
   'ticket.status_changed': 'Ticket status changed',
+  'ticket.due_changed': 'Ticket due date changed',
+  'ticket.due_soon': 'Ticket due soon',
+  'ticket.overdue': 'Ticket overdue',
 }
 
 /** The two timer-driven unresponsive triggers (support platform §4.6) — the
@@ -805,6 +811,12 @@ export const TRIGGER_DESCRIPTIONS: Partial<Record<TriggerType, string>> = {
     'Only fires for a ticket that has a linked conversation. A standalone ticket with no linked conversation never triggers this.',
   'ticket.status_changed':
     'Only fires for a ticket that has a linked conversation. Optionally restrict it to when the ticket enters a specific status category below.',
+  'ticket.due_changed':
+    'Runs when a teammate or integration sets, moves, or clears a ticket’s due date. Only fires for a ticket linked to a customer conversation.',
+  'ticket.due_soon':
+    'Runs once when an open ticket’s due date is less than 24 hours away. Only fires for a ticket linked to a customer conversation.',
+  'ticket.overdue':
+    'Runs once when an open ticket’s due date passes. Only fires for a ticket linked to a customer conversation.',
 }
 
 /** Trigger label for a stored triggerType, tolerant of an unknown/legacy value. */
@@ -1041,8 +1053,12 @@ export function defaultAction(type: ActionType): GraphAction {
       return { type, body: '' }
     case 'set_ticket_status':
       return { type, statusId: '' }
+    case 'set_ticket_due_date':
+      return { type, seconds: 86400 }
     case 'convert_to_ticket':
       return { type }
+    case 'add_ticket_watcher':
+      return { type, principalId: '' }
     case 'send_webhook':
       return { type, url: '' }
   }
@@ -1105,7 +1121,7 @@ export type TreeStep =
   | { id: string; kind: 'branch'; paths: BranchPath[] }
   // ── Conversational block kinds (Phase C, slice C-5) ───────────────────────
   | { id: string; kind: 'message'; body: BlockBody }
-  | { id: string; kind: 'send_ticket_form'; body: BlockBody }
+  | { id: string; kind: 'send_ticket_form'; body: BlockBody; askDueDate?: boolean }
   | { id: string; kind: 'show_reply_time' }
   | { id: string; kind: 'disable_composer' }
   | {
@@ -1424,6 +1440,20 @@ function validateAction(v: unknown, where: string): string | null {
       return nonEmptyString(v.body) ? null : `${where}: write the note`
     case 'set_ticket_status':
       return nonEmptyString(v.statusId) ? null : `${where}: choose a ticket status`
+    case 'set_ticket_due_date':
+      // Relative (seconds) or absolute (dueAtIso, a UTC timestamp, or null to
+      // clear) — see workflow.schemas.ts's setTicketDueDateActionSchema. The
+      // server bounds seconds by MAX_DUE_OFFSET_SECONDS on save.
+      if ('seconds' in v) {
+        return typeof v.seconds === 'number' && Number.isInteger(v.seconds) && v.seconds >= 60
+          ? null
+          : `${where}: the due date offset must be a whole number of seconds (60 or more)`
+      }
+      return v.dueAtIso === null || isUtcTimestamp(v.dueAtIso)
+        ? null
+        : `${where}: the due date needs a UTC timestamp (e.g. 2026-08-01T09:00:00Z) or null`
+    case 'add_ticket_watcher':
+      return nonEmptyString(v.principalId) ? null : `${where}: choose a teammate to add`
     case 'convert_to_ticket':
       return null
     case 'send_webhook':
@@ -1505,6 +1535,9 @@ export function validateGraph(input: unknown): Result<WorkflowGraphJson> {
       case 'send_ticket_form': {
         const err = validateBlockBody(node.body, where)
         if (err) return fail(err)
+        if (node.askDueDate !== undefined && typeof node.askDueDate !== 'boolean') {
+          return fail(`${where}: "askDueDate" must be true or false when present`)
+        }
         break
       }
       case 'show_reply_time':
@@ -1894,7 +1927,12 @@ export function graphToTree(graph: WorkflowGraphJson): Result<WorkflowTree> {
           steps.push({ id: node.id, kind: 'message', body: node.body })
           break
         case 'send_ticket_form':
-          steps.push({ id: node.id, kind: 'send_ticket_form', body: node.body })
+          steps.push({
+            id: node.id,
+            kind: 'send_ticket_form',
+            body: node.body,
+            ...(node.askDueDate === true ? { askDueDate: true } : {}),
+          })
           break
         case 'show_reply_time':
           steps.push({ id: node.id, kind: 'show_reply_time' })
@@ -1976,7 +2014,13 @@ export function treeToGraph(tree: WorkflowTree): WorkflowGraphJson {
           nodes.push({ id: step.id, type: 'message', body: step.body })
           break
         case 'send_ticket_form':
-          nodes.push({ id: step.id, type: 'send_ticket_form', body: step.body })
+          nodes.push({
+            id: step.id,
+            type: 'send_ticket_form',
+            body: step.body,
+            // Only when on, so an untouched form saves the same graph as before.
+            ...(step.askDueDate === true ? { askDueDate: true } : {}),
+          })
           break
         case 'show_reply_time':
           nodes.push({ id: step.id, type: 'show_reply_time' })
@@ -2481,10 +2525,17 @@ export function actionSummary(action: GraphAction, labels: EntityLabels = {}): s
       return action.body.trim() ? `Note: ${truncate(action.body.trim(), 60)}` : 'Add a note…'
     case 'set_ticket_status':
       return `Set ticket status to ${named(action.statusId, labels.ticketStatuses, 'a status…')}`
+    case 'set_ticket_due_date':
+      if ('seconds' in action) return `Set ticket due date: in ${durationPhrase(action.seconds)}`
+      return action.dueAtIso
+        ? `Set ticket due date: ${snoozeUntilLabel(action.dueAtIso, labels)}`
+        : 'Clear ticket due date'
     case 'convert_to_ticket':
       return action.ticketTypeId
         ? `Convert to a ${named(action.ticketTypeId, labels.ticketTypes, 'ticket')}`
         : 'Convert to a ticket'
+    case 'add_ticket_watcher':
+      return `Add ${named(action.principalId, labels.members, 'a teammate…')} as a ticket watcher`
     case 'send_webhook':
       return action.url ? `Send webhook to ${truncate(action.url, 40)}` : 'Send a webhook…'
   }
@@ -2900,6 +2951,12 @@ export function actionIssue(action: GraphAction): string | null {
       return action.body.trim() ? null : 'Write the note'
     case 'set_ticket_status':
       return isSetRef(action.statusId) ? null : 'Choose a ticket status'
+    case 'set_ticket_due_date':
+      // A date or an explicit clear is always complete; a relative offset
+      // under a minute is one the server rejects on save.
+      return 'seconds' in action && action.seconds < 60 ? 'Choose how far ahead it is due' : null
+    case 'add_ticket_watcher':
+      return isSetRef(action.principalId) ? null : 'Choose a teammate to add'
     case 'send_webhook':
       return isLikelyUrl(action.url) ? null : `Enter ${WEBHOOK_URL_HINT}`
     case 'set_priority':
@@ -3095,10 +3152,12 @@ function stepLabel(step: TreeStep, labels: EntityLabels): string {
       return `Branch · ${step.paths.length} path${step.paths.length === 1 ? '' : 's'}`
     case 'message':
       return blockBodyPreview(step.body)
-    case 'send_ticket_form':
-      return isBlockBodyEmpty(step.body)
+    case 'send_ticket_form': {
+      const summary = isBlockBodyEmpty(step.body)
         ? BLOCK_STEP_LABELS.send_ticket_form
         : `${BLOCK_STEP_LABELS.send_ticket_form} · ${blockBodyPreview(step.body)}`
+      return step.askDueDate ? `${summary} · asks for a due date` : summary
+    }
     case 'show_reply_time':
       return BLOCK_STEP_LABELS.show_reply_time
     case 'disable_composer':

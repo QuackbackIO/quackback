@@ -96,8 +96,9 @@ export interface TicketEmbedRow {
  * card resolves ONLY for:
  *   - a team member whose ticket filter admits the ticket (`teamVisible`), the
  *     same set the inbox shows them, or
- *   - the ticket's own requester on a `customer` ticket — the same ownership
- *     gate `loadOwnedTicketOr404` enforces for the portal ticket page.
+ *   - the ticket's own requester on a `customer` ticket — the requester arm of
+ *     `loadAccessibleTicketOr404`, which gates the portal ticket page. A
+ *     customer the ticket was shared with reads it on its thread, not here.
  * Everyone else (a different visitor, an anonymous viewer, a requester of some
  * OTHER ticket) gets null → the resolver degrades to "unavailable", leaking no
  * existence. A soft-deleted ticket is unavailable for everyone.
