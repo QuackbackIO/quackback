@@ -153,6 +153,12 @@ export const helpCenterArticles = pgTable(
      * Search stems the article by it.
      */
     locale: text('locale').notNull().default('en'),
+    /**
+     * Counts changes to the text translations are made from (title,
+     * description, body). Other edits leave it alone, so translations stay
+     * current when the article moves or its audience changes.
+     */
+    textRevision: integer('text_revision').notNull().default(1),
     searchVector: tsvector('search_vector').generatedAlwaysAs(
       sql`setweight(to_tsvector(${sql.raw(localeRegconfigCaseSql('locale'))}, coalesce(title, '')), 'A') || setweight(to_tsvector(${sql.raw(localeRegconfigCaseSql('locale'))}, coalesce(content, '')), 'B')`
     ),
@@ -269,6 +275,27 @@ export const helpCenterSearchQueries = pgTable(
 // Translations (domains/languages §2)
 // ============================================
 
+/** The main text a translation was made from (see kb_article_translations.source_text). */
+export interface TranslationSourceText {
+  title: string
+  description: string | null
+  /** Markdown. */
+  content: string
+}
+
+/** A problem the translation checks found, with what it concerns. */
+export interface TranslationCheckProblem {
+  code: 'empty' | 'code_block_changed' | 'link_missing' | 'image_missing' | 'headings_changed'
+  /** The code, link or image target, or heading outline, the problem is about. */
+  detail?: string
+}
+
+/** The outcome of the checks on an AI translation (see kb_article_translations.check_result). */
+export interface TranslationCheckResult {
+  ok: boolean
+  problems: TranslationCheckProblem[]
+}
+
 /**
  * Per-article translation variants (not chrome-only): default locale content
  * lives on kb_articles itself; every additional locale is a row here.
@@ -289,6 +316,23 @@ export const helpCenterArticleTranslations = pgTable(
     content: text('content').notNull().default(''),
     contentJson: jsonb('content_json').$type<TiptapContent>(),
     status: text('status').$type<'draft' | 'published'>().notNull().default('draft'),
+    /** The article's text_revision this translation was made from. Lower means it needs an update. */
+    sourceRevision: integer('source_revision').notNull().default(1),
+    /** The article's text at sourceRevision, for showing what changed since. */
+    sourceText: jsonb('source_text').$type<TranslationSourceText>(),
+    /**
+     * An AI update waiting for review. The live columns above are what
+     * readers see until a person publishes it.
+     */
+    pendingTitle: text('pending_title'),
+    pendingDescription: text('pending_description'),
+    pendingContent: text('pending_content'),
+    pendingContentJson: jsonb('pending_content_json').$type<TiptapContent>(),
+    pendingSourceRevision: integer('pending_source_revision'),
+    pendingSourceText: jsonb('pending_source_text').$type<TranslationSourceText>(),
+    pendingAt: timestamp('pending_at', { withTimezone: true }),
+    /** Checks on the latest AI text of this row: the pending update, else the AI draft. */
+    checkResult: jsonb('check_result').$type<TranslationCheckResult>(),
     searchVector: tsvector('search_vector').generatedAlwaysAs(
       sql`setweight(to_tsvector(${sql.raw(localeRegconfigCaseSql('locale'))}, coalesce(title, '')), 'A') || setweight(to_tsvector(${sql.raw(localeRegconfigCaseSql('locale'))}, coalesce(content, '')), 'B')`
     ),

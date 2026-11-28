@@ -19,6 +19,7 @@ import { slugify } from '@/lib/shared/utils/slugify'
 import { uniqueHelpCenterSlug } from './help-center.slug'
 import { deleteRedirectRulesForTarget } from './help-center-redirect-rules.service'
 import { cancelPendingAutoTranslations } from './help-center-translate-jobs'
+import { nextTextRevision } from './help-center-translation-versions.service'
 import type {
   HelpCenterArticleWithCategory,
   CreateArticleInput,
@@ -384,7 +385,7 @@ export async function updateArticle(
 
     const [row] = await tx
       .update(helpCenterArticles)
-      .set(updateData)
+      .set({ ...updateData, textRevision: nextTextRevision(updateData) })
       .where(and(eq(helpCenterArticles.id, id), isNull(helpCenterArticles.deletedAt)))
       .returning()
 

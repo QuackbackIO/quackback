@@ -2,7 +2,7 @@
  * Types for Help Center domain
  */
 
-import type { TiptapContent } from '@/lib/server/db'
+import type { TiptapContent, TranslationCheckResult, TranslationSourceText } from '@/lib/server/db'
 import type {
   KbCategoryId,
   KbArticleId,
@@ -124,6 +124,16 @@ export interface HelpCenterArticleTranslation {
   content: string
   contentJson: TiptapContent | null
   status: 'draft' | 'published'
+  sourceRevision: number
+  sourceText: TranslationSourceText | null
+  pendingTitle: string | null
+  pendingDescription: string | null
+  pendingContent: string | null
+  pendingContentJson: TiptapContent | null
+  pendingSourceRevision: number | null
+  pendingSourceText: TranslationSourceText | null
+  pendingAt: Date | null
+  checkResult: TranslationCheckResult | null
   createdAt: Date
   updatedAt: Date
 }
