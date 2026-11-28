@@ -78,9 +78,10 @@ in `AREA_MESSAGE_PREFIXES` in `apps/web/src/lib/shared/i18n.ts`. Pages leave
 area strings out of the catalogue they send, and each area loads its own:
 
 - **Admin areas.** Each admin page belongs to one area (for example
-  `adminInbox` for `admin.inbox.`). The page's route loader returns
-  `seededAreas: await seedAdminAreas(context.personLocale, 'adminInbox')`, and
-  the admin layout hands those strings to everything the route renders. The
+  `adminInbox` for `admin.inbox.`). The page's route loader spreads
+  `...(await seedAdminAreas(context.personLocale, 'adminInbox'))` into its
+  data (or returns it, when it has nothing else to return), and the admin
+  layout hands those strings to everything the route renders. The
   admin shell (the rail, menus, search, notifications and shared dialogs) has
   no area: its strings ride the admin layout's own seed.
 - **Portal areas.** A portal route loader calls `seedAreaMessages` and wraps
