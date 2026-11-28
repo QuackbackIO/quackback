@@ -88,7 +88,13 @@ export function SavedMessagesColumn({
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="flex min-w-0 items-center gap-1.5">
-                  <span className="truncate text-sm font-medium">{m.authorName ?? 'Unknown'}</span>
+                  <span className="truncate text-sm font-medium">
+                    {m.authorName ??
+                      intl.formatMessage({
+                        id: 'admin.inbox.savedMessagesColumn.unknown',
+                        defaultMessage: 'Unknown',
+                      })}
+                  </span>
                   <ViaApiBadge author={{ viaApi: m.authorViaApi }} />
                 </span>
                 <TimeAgo

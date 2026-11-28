@@ -246,7 +246,7 @@ export function ConversationListToolbar({
             <FilterChip
               icon={FlagIcon}
               label={intl.formatMessage({
-                id: 'admin.inbox.conversationListToolbar.priority2',
+                id: 'admin.inbox.conversationListToolbar.priority',
                 defaultMessage: 'Priority',
               })}
               value={intl.formatMessage(PRIORITY_LABELS[priorityFilter])}
@@ -258,7 +258,7 @@ export function ConversationListToolbar({
             <FilterChip
               icon={ChatBubbleOvalLeftIcon}
               label={intl.formatMessage({
-                id: 'admin.inbox.conversationListToolbar.channel2',
+                id: 'admin.inbox.conversationListToolbar.channel',
                 defaultMessage: 'Channel',
               })}
               value={activeChannel.label}
@@ -270,7 +270,7 @@ export function ConversationListToolbar({
             <FilterChip
               icon={TicketIcon}
               label={intl.formatMessage({
-                id: 'admin.inbox.conversationListToolbar.type2',
+                id: 'admin.inbox.conversationListToolbar.type',
                 defaultMessage: 'Type',
               })}
               value={activeType.name}
@@ -286,7 +286,7 @@ export function ConversationListToolbar({
         <FilterChip
           icon={BuildingOffice2Icon}
           label={intl.formatMessage({
-            id: 'admin.inbox.conversationListToolbar.company2',
+            id: 'admin.inbox.conversationListToolbar.company',
             defaultMessage: 'Company',
           })}
           value={activeCompany.name}

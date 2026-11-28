@@ -11,9 +11,8 @@ import {
 import type { IntlShape } from 'react-intl'
 import type { TicketId } from '@quackback/ids'
 import type { TicketActivityType } from '@/lib/server/domains/tickets'
-import type { ConversationPriority } from '@/lib/shared/conversation/types'
 import { activityQueries } from '@/lib/client/queries/activity'
-import { priorityMeta } from '@/lib/shared/conversation/priority-meta'
+import { PRIORITY_LABELS, formatLabel } from '@/components/admin/conversation/inbox-labels'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { ViaApiBadge } from '@/components/admin/conversation/via-api-badge'
@@ -151,7 +150,7 @@ function rowContent(intl: IntlShape, item: TicketActivityItem): RowContent | nul
           },
           {
             actor,
-            priority: priorityMeta((str(m.to) ?? 'none') as ConversationPriority).label,
+            priority: formatLabel(intl, PRIORITY_LABELS, str(m.to) ?? 'none'),
           }
         ),
         details: [],

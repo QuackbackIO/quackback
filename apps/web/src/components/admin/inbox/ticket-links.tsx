@@ -97,7 +97,14 @@ export function TicketLinks({ ticket, onChanged }: { ticket: TicketDTO; onChange
     void qc.invalidateQueries({ queryKey: ticketKeys.all() })
     onChanged()
   }
-  const onError = (e: unknown) => toastError(e, 'Could not update the link')
+  const onError = (e: unknown) =>
+    toastError(
+      e,
+      intl.formatMessage({
+        id: 'admin.inbox.ticketLinks.updateFailed',
+        defaultMessage: 'Could not update the link',
+      })
+    )
 
   const link = useMutation({
     mutationFn: (v: { trackerTicketId: TicketId; ticketId: TicketId }) =>

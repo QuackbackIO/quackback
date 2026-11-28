@@ -1,4 +1,4 @@
-import type { MessageDescriptor } from 'react-intl'
+import type { IntlShape, MessageDescriptor } from 'react-intl'
 import type {
   ConversationEndReason,
   ConversationPriority,
@@ -6,7 +6,9 @@ import type {
 } from '@/lib/shared/conversation/types'
 import type { ConversationSort } from '@/lib/shared/conversation/views'
 import type { SlaTargetKind } from '@/lib/shared/conversation/sla'
+import type { TicketStage, TicketStatusCategory } from '@/lib/shared/db-types'
 import { isNativeIssueChannel, type Channel } from '@/lib/shared/channels'
+import { previewLabelKind, type PreviewLabelKind } from '@/lib/shared/conversation/preview-labels'
 
 type Descriptor = MessageDescriptor & { defaultMessage: string }
 
@@ -229,4 +231,49 @@ export function replyPlaceholderWords(
   if (opts.isTicket) return COMPOSER_WORDS.placeholderTicket
   if (opts.closed && isNativeIssueChannel(channel)) return COMPOSER_WORDS.placeholderClosedIssue
   return COMPOSER_WORDS.placeholderReply
+}
+
+/**
+ * A stored value in words, or the value as it is when the table has none for
+ * it. The columns behind these values are plain text, so a row can hold a
+ * value newer or older than the client's table.
+ */
+export function formatLabel(
+  intl: IntlShape,
+  labels: Partial<Record<string, MessageDescriptor>>,
+  value: string
+): string {
+  const label = Object.hasOwn(labels, value) ? labels[value] : undefined
+  return label ? intl.formatMessage(label) : value
+}
+
+const PREVIEW_WORDS: Record<PreviewLabelKind, Descriptor> = {
+  image: { id: 'admin.inbox.labels.preview.image', defaultMessage: 'Image' },
+  post: { id: 'admin.inbox.labels.preview.post', defaultMessage: 'Shared a post' },
+  update: { id: 'admin.inbox.labels.preview.update', defaultMessage: 'Shared an update' },
+  attachment: { id: 'admin.inbox.labels.preview.attachment', defaultMessage: 'Attachment' },
+}
+
+/** A list preview in words: the server's fixed preview words are worded, any other text is shown as it is. */
+export function previewText(intl: IntlShape, preview: string): string {
+  const kind = previewLabelKind(preview)
+  return kind ? intl.formatMessage(PREVIEW_WORDS[kind]) : preview
+}
+
+/** A ticket status category, as the view dialog's rule values name it. */
+export const TICKET_CATEGORY_LABELS: Record<TicketStatusCategory, Descriptor> = {
+  open: { id: 'admin.inbox.labels.ticketCategory.open', defaultMessage: 'Open' },
+  pending: { id: 'admin.inbox.labels.ticketCategory.pending', defaultMessage: 'Pending' },
+  closed: { id: 'admin.inbox.labels.ticketCategory.closed', defaultMessage: 'Closed' },
+}
+
+/** The requester stages under their default names (a workspace can rename them for requesters). */
+export const TICKET_STAGE_LABELS: Record<TicketStage, Descriptor> = {
+  received: { id: 'admin.inbox.labels.ticketStage.received', defaultMessage: 'Received' },
+  in_progress: { id: 'admin.inbox.labels.ticketStage.inProgress', defaultMessage: 'In progress' },
+  awaiting_requester: {
+    id: 'admin.inbox.labels.ticketStage.awaitingRequester',
+    defaultMessage: 'Awaiting your reply',
+  },
+  resolved: { id: 'admin.inbox.labels.ticketStage.resolved', defaultMessage: 'Resolved' },
 }

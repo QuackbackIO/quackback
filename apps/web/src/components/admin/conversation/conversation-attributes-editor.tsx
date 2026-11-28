@@ -139,7 +139,7 @@ function AttributeEditor({
           <SelectContent>
             <SelectItem value={NONE}>
               {intl.formatMessage({
-                id: 'admin.inbox.conversationAttributesEditor.none2',
+                id: 'admin.inbox.conversationAttributesEditor.none',
                 defaultMessage: 'None',
               })}
             </SelectItem>
@@ -163,7 +163,14 @@ function AttributeEditor({
               type="button"
               className="inline-flex h-7 max-w-40 items-center gap-1 rounded-md px-2 text-sm hover:bg-muted"
             >
-              <span className="truncate">{labels.length > 0 ? labels.join(', ') : 'None'}</span>
+              <span className="truncate">
+                {labels.length > 0
+                  ? labels.join(', ')
+                  : intl.formatMessage({
+                      id: 'admin.inbox.conversationAttributesEditor.none',
+                      defaultMessage: 'None',
+                    })}
+              </span>
               <ChevronDownIcon className="h-3 w-3 shrink-0 text-muted-foreground" />
             </button>
           </DropdownMenuTrigger>
@@ -217,7 +224,14 @@ export const ConversationAttributesEditor = memo(function ConversationAttributes
       })
       onChanged()
     },
-    onError: (e) => toastError(e, 'Failed to update attribute'),
+    onError: (e) =>
+      toastError(
+        e,
+        intl.formatMessage({
+          id: 'admin.inbox.conversationAttributesEditor.updateFailed',
+          defaultMessage: 'Failed to update attribute',
+        })
+      ),
   })
 
   if (!definitions || definitions.length === 0) return null

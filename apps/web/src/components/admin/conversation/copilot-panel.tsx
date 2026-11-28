@@ -600,7 +600,7 @@ export const CopilotPanel = memo(function CopilotPanel({
             defaultMessage: 'New chat',
           })}
           title={intl.formatMessage({
-            id: 'admin.inbox.copilotPanel.newChat2',
+            id: 'admin.inbox.copilotPanel.newChat',
             defaultMessage: 'New chat',
           })}
           className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
@@ -806,7 +806,15 @@ function CopilotTurnView({
                           ) : (
                             <SparklesIcon className="size-4" />
                           )}
-                          {turn.rewriting ? 'Rewriting…' : 'Modify'}
+                          {turn.rewriting
+                            ? intl.formatMessage({
+                                id: 'admin.inbox.copilotPanel.rewriting',
+                                defaultMessage: 'Rewriting…',
+                              })
+                            : intl.formatMessage({
+                                id: 'admin.inbox.copilotPanel.modify',
+                                defaultMessage: 'Modify',
+                              })}
                           {!turn.rewriting && <ChevronDownIcon className="size-3.5" />}
                         </Button>
                       </DropdownMenuTrigger>
@@ -1035,7 +1043,15 @@ function CopilotAskInput({
   onToggleSource: (type: SourceType) => void
 }) {
   const intl = useOptionalIntl()
-  const placeholder = hasAskedBefore ? 'Ask a follow-up question...' : 'Ask a question...'
+  const placeholder = hasAskedBefore
+    ? intl.formatMessage({
+        id: 'admin.inbox.copilotPanel.askFollowUp',
+        defaultMessage: 'Ask a follow-up question...',
+      })
+    : intl.formatMessage({
+        id: 'admin.inbox.copilotPanel.askQuestion',
+        defaultMessage: 'Ask a question...',
+      })
   return (
     <div className="border-t border-border/50 p-3">
       {/* Compact quick-action pills only once a thread exists — the empty
@@ -1105,7 +1121,7 @@ function CopilotAskInput({
             <PopoverContent align="end" className="w-64 space-y-1 p-2">
               <p className="px-1 pb-1 text-xs font-medium text-muted-foreground">
                 {intl.formatMessage({
-                  id: 'admin.inbox.copilotPanel.answerSources2',
+                  id: 'admin.inbox.copilotPanel.answerSources',
                   defaultMessage: 'Answer sources',
                 })}
               </p>
@@ -1145,7 +1161,14 @@ function CopilotAskInput({
             type="button"
             onClick={busy ? onStop : onSubmit}
             disabled={!busy && !value.trim()}
-            aria-label={busy ? 'Stop' : 'Ask'}
+            aria-label={
+              busy
+                ? intl.formatMessage({
+                    id: 'admin.inbox.copilotPanel.stop',
+                    defaultMessage: 'Stop',
+                  })
+                : intl.formatMessage({ id: 'admin.inbox.copilotPanel.ask', defaultMessage: 'Ask' })
+            }
             className={cn(
               'flex size-7 items-center justify-center rounded-full text-primary-foreground transition-colors disabled:opacity-40',
               busy ? 'bg-destructive' : 'bg-primary'

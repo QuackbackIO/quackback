@@ -168,7 +168,7 @@ export const EndConversationDialog = memo(function EndConversationDialog({
             onClick={() => reason && end.mutate({ reason, note })}
           >
             {intl.formatMessage({
-              id: 'admin.inbox.endConversationDialog.endConversation2',
+              id: 'admin.inbox.endConversationDialog.endConversation',
               defaultMessage: 'End conversation',
             })}
           </Button>

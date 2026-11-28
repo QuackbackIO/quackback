@@ -125,7 +125,19 @@ export const ConvertToPostDialog = memo(function ConvertToPostDialog({
         },
       }),
     onSuccess: (res) => {
-      toast.success(res.created ? 'Post created from conversation' : 'Upvoted existing post')
+      toast.success(
+        intl.formatMessage(
+          res.created
+            ? {
+                id: 'admin.inbox.convertToPostDialog.created',
+                defaultMessage: 'Post created from conversation',
+              }
+            : {
+                id: 'admin.inbox.convertToPostDialog.upvoted',
+                defaultMessage: 'Upvoted existing post',
+              }
+        )
+      )
       setOpen(false)
       onConverted?.()
     },
@@ -370,7 +382,7 @@ export const ConvertToPostDialog = memo(function ConvertToPostDialog({
             }}
           >
             {intl.formatMessage({
-              id: 'admin.inbox.convertToPostDialog.trackAsFeedback2',
+              id: 'admin.inbox.convertToPostDialog.trackAsFeedback',
               defaultMessage: 'Track as feedback',
             })}
           </Button>

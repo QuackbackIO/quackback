@@ -1,5 +1,14 @@
 /** The bulk action bar's words (admin inbox area). */
 export const MESSAGES = {
+  dismiss: { id: 'admin.inbox.bulkActionBar.dismiss', defaultMessage: 'Dismiss' },
+  clearSelection: {
+    id: 'admin.inbox.bulkActionBar.clearSelection',
+    defaultMessage: 'Clear selection',
+  },
+  notForTickets: {
+    id: 'admin.inbox.bulkActionBar.notForTickets',
+    defaultMessage: 'Not available for tickets',
+  },
   bulkActions: {
     id: 'admin.inbox.bulkActionBar.bulkActions',
     defaultMessage: 'Bulk actions',
@@ -32,7 +41,7 @@ export const MESSAGES = {
     defaultMessage: 'Delete permanently',
   },
   bulkActions2: {
-    id: 'admin.inbox.bulkActionBar.bulkActions2',
+    id: 'admin.inbox.bulkActionBar.bulkActions',
     defaultMessage: 'Bulk actions',
   },
   macro: {

@@ -126,7 +126,12 @@ export function AttributeValueInput({
               )}
             >
               <span className="truncate">
-                {labels.length > 0 ? labels.join(', ') : 'Choose values'}
+                {labels.length > 0
+                  ? labels.join(', ')
+                  : intl.formatMessage({
+                      id: 'admin.shell.attributeValueInput.chooseValues',
+                      defaultMessage: 'Choose values',
+                    })}
               </span>
               <ChevronDownIcon className="h-3 w-3 shrink-0 text-muted-foreground" />
             </button>

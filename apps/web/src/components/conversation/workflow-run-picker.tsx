@@ -7,6 +7,7 @@
  * targeting (channel/audience/send-window/frequency-cap) entirely: those are
  * trigger-time guards, and this is a human choosing to run the workflow now.
  */
+import type { MessageDescriptor } from 'react-intl'
 import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { memo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -28,10 +29,19 @@ import {
 
 /** The friendly toast copy for each structured failure reason
  *  runWorkflowManuallyFn can return — see its own doc for what each means. */
-const FAILURE_TOASTS: Record<'locked' | 'nothing_to_do' | 'not_live', string> = {
-  locked: 'A customer-facing workflow is already active on this conversation.',
-  nothing_to_do: 'Workflow had nothing to do on this conversation.',
-  not_live: 'This workflow is no longer live.',
+const FAILURE_TOASTS: Record<'locked' | 'nothing_to_do' | 'not_live', MessageDescriptor> = {
+  locked: {
+    id: 'admin.inbox.workflowRunPicker.failure.locked',
+    defaultMessage: 'A customer-facing workflow is already active on this conversation.',
+  },
+  nothing_to_do: {
+    id: 'admin.inbox.workflowRunPicker.failure.nothingToDo',
+    defaultMessage: 'Workflow had nothing to do on this conversation.',
+  },
+  not_live: {
+    id: 'admin.inbox.workflowRunPicker.failure.notLive',
+    defaultMessage: 'This workflow is no longer live.',
+  },
 }
 
 export const WorkflowRunPicker = memo(function WorkflowRunPicker({
@@ -66,7 +76,7 @@ export const WorkflowRunPicker = memo(function WorkflowRunPicker({
         )
         onApplied?.()
       } else {
-        toast.error(FAILURE_TOASTS[result.reason])
+        toast.error(intl.formatMessage(FAILURE_TOASTS[result.reason]))
       }
     } catch {
       toast.error(
@@ -100,7 +110,7 @@ export const WorkflowRunPicker = memo(function WorkflowRunPicker({
         </TooltipTrigger>
         <TooltipContent>
           {intl.formatMessage({
-            id: 'admin.inbox.workflowRunPicker.runAWorkflow2',
+            id: 'admin.inbox.workflowRunPicker.runAWorkflow',
             defaultMessage: 'Run a workflow',
           })}
         </TooltipContent>

@@ -74,10 +74,14 @@ import { cn } from '@/lib/shared/utils'
 import { useFeatureFlags } from '@/lib/client/hooks/use-root-context'
 import { usePermission } from '@/lib/client/hooks/use-permission'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { END_REASON_LABELS } from '@/components/admin/conversation/inbox-labels'
+import {
+  END_REASON_LABELS,
+  SLA_CHIP,
+  formatLabel,
+} from '@/components/admin/conversation/inbox-labels'
 
 const RESOLVED_META = {
-  label: { id: 'admin.inbox.inboxDetailPanel.resolved2', defaultMessage: 'Resolved' },
+  label: { id: 'admin.inbox.inboxDetailPanel.resolved', defaultMessage: 'Resolved' },
   className: 'bg-success/10 text-success',
 }
 // Both resolution flavours (customer-confirmed + assumed-after-inactivity) read
@@ -153,7 +157,9 @@ function TicketDueChip({ dueAt, resolvedAt }: { dueAt: string | null; resolvedAt
       )}
     >
       <ClockIcon className="h-3 w-3" aria-hidden />
-      {overdue ? `${formatSlaCountdown(abs)} over` : formatSlaCountdown(abs)}
+      {overdue
+        ? intl.formatMessage(SLA_CHIP.over, { time: formatSlaCountdown(abs) })
+        : formatSlaCountdown(abs)}
     </span>
   )
 }
@@ -418,7 +424,13 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
   const contactName = supportContactName({
     accountName: detail?.name,
     publicName,
-    fallback: principalId ? (isTicketItem ? 'Requester' : 'Visitor') : 'No requester',
+    fallback: intl.formatMessage(
+      principalId
+        ? isTicketItem
+          ? { id: 'admin.inbox.inboxDetailPanel.requester', defaultMessage: 'Requester' }
+          : { id: 'admin.inbox.inboxDetailPanel.visitor', defaultMessage: 'Visitor' }
+        : { id: 'admin.inbox.inboxDetailPanel.noRequester', defaultMessage: 'No requester' }
+    ),
   })
   const convoCount = history?.conversations.length ?? 0
   const convoMore = history?.hasMore ?? false
@@ -426,7 +438,7 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
   const isClosedConversation = !isTicketItem && conversation?.status === 'closed'
   const endReasonLabel =
     !isTicketItem && conversation?.endReason
-      ? intl.formatMessage(END_REASON_LABELS[conversation.endReason])
+      ? formatLabel(intl, END_REASON_LABELS, conversation.endReason)
       : null
 
   // One target object per item, so the memoised sections that take it skip
@@ -624,7 +636,12 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
                     className="flex w-full min-w-0 flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-start transition-colors hover:bg-muted/60"
                   >
                     <span className="block w-full min-w-0 truncate text-xs text-foreground/90">
-                      {c.subject ?? c.lastMessagePreview ?? 'Conversation'}
+                      {c.subject ??
+                        c.lastMessagePreview ??
+                        intl.formatMessage({
+                          id: 'admin.inbox.inboxDetailPanel.conversation',
+                          defaultMessage: 'Conversation',
+                        })}
                     </span>
                     <span className="block w-full min-w-0 truncate text-xs capitalize text-muted-foreground">
                       {c.status} · <TimeAgo date={c.lastMessageAt} />
@@ -671,7 +688,15 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
           <div className="space-y-3 border-t border-border/30 pt-4">
             <div className="flex items-center justify-between">
               <span className={MENU_LABEL}>
-                {isTicketItem ? 'Ticket details' : 'Linked ticket'}
+                {isTicketItem
+                  ? intl.formatMessage({
+                      id: 'admin.inbox.inboxDetailPanel.ticketDetails',
+                      defaultMessage: 'Ticket details',
+                    })
+                  : intl.formatMessage({
+                      id: 'admin.inbox.inboxDetailPanel.linkedTicket',
+                      defaultMessage: 'Linked ticket',
+                    })}
               </span>
               {!isTicketItem && (
                 <button
@@ -785,7 +810,10 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
                   {ticket.firstResponseAt ? (
                     <DetailDate date={ticket.firstResponseAt} />
                   ) : (
-                    'Not yet'
+                    intl.formatMessage({
+                      id: 'admin.inbox.inboxDetailPanel.notYet',
+                      defaultMessage: 'Not yet',
+                    })
                   )}
                 </span>
               </Row>
@@ -815,9 +843,15 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
               const display =
                 field.type === 'checkbox' ? (
                   raw === true ? (
-                    'Yes'
+                    intl.formatMessage({
+                      id: 'admin.inbox.inboxDetailPanel.yes',
+                      defaultMessage: 'Yes',
+                    })
                   ) : (
-                    'No'
+                    intl.formatMessage({
+                      id: 'admin.inbox.inboxDetailPanel.no',
+                      defaultMessage: 'No',
+                    })
                   )
                 ) : field.type === 'date' && typeof raw === 'string' ? (
                   <CalendarDate value={raw} options={DETAIL_DATE} />
@@ -879,7 +913,7 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
               <Row
                 icon={CheckCircleIcon}
                 label={intl.formatMessage({
-                  id: 'admin.inbox.inboxDetailPanel.status2',
+                  id: 'admin.inbox.inboxDetailPanel.status',
                   defaultMessage: 'Status',
                 })}
               >
@@ -966,7 +1000,11 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
               })}
             >
               <span className="truncate text-sm font-medium text-foreground">
-                {ticket.company?.name ?? 'None'}
+                {ticket.company?.name ??
+                  intl.formatMessage({
+                    id: 'admin.inbox.inboxDetailPanel.none',
+                    defaultMessage: 'None',
+                  })}
               </span>
             </Row>
           )}
@@ -1189,7 +1227,7 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
   return (
     <aside
       aria-label={intl.formatMessage({
-        id: 'admin.inbox.inboxDetailPanel.itemDetails2',
+        id: 'admin.inbox.inboxDetailPanel.itemDetails',
         defaultMessage: 'Item details',
       })}
       className={asideClassName}

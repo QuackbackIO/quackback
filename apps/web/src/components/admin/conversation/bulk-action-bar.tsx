@@ -137,7 +137,7 @@ export function BulkActionBar({
           <button
             type="button"
             onClick={onClear}
-            aria-label={solo ? 'Dismiss' : 'Clear selection'}
+            aria-label={intl.formatMessage(solo ? MESSAGES.dismiss : MESSAGES.clearSelection)}
             className="flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
             <XMarkIcon className="size-4" />
@@ -199,7 +199,7 @@ export function BulkActionBar({
         <button
           type="button"
           onClick={onClear}
-          aria-label={solo ? 'Dismiss' : 'Clear selection'}
+          aria-label={intl.formatMessage(solo ? MESSAGES.dismiss : MESSAGES.clearSelection)}
           className="flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
           <XMarkIcon className="size-4" />
@@ -220,7 +220,7 @@ export function BulkActionBar({
             <button
               type="button"
               disabled={pending || disableMacro}
-              title={disableMacro ? 'Not available for tickets' : undefined}
+              title={disableMacro ? intl.formatMessage(MESSAGES.notForTickets) : undefined}
               className={triggerClass}
             >
               {intl.formatMessage(MESSAGES.macro)}
@@ -308,7 +308,7 @@ export function BulkActionBar({
             <button
               type="button"
               disabled={pending || disableTag}
-              title={disableTag ? 'Not available for tickets' : undefined}
+              title={disableTag ? intl.formatMessage(MESSAGES.notForTickets) : undefined}
               className={triggerClass}
             >
               {intl.formatMessage(MESSAGES.tag)}
@@ -344,7 +344,7 @@ export function BulkActionBar({
             <button
               type="button"
               disabled={pending || disableSnooze}
-              title={disableSnooze ? 'Not available for tickets' : undefined}
+              title={disableSnooze ? intl.formatMessage(MESSAGES.notForTickets) : undefined}
               className={triggerClass}
             >
               {intl.formatMessage(MESSAGES.snooze)}

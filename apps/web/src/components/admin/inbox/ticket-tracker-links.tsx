@@ -118,7 +118,14 @@ function TrackerSection({
     void qc.invalidateQueries({ queryKey: ticketKeys.externalLinks(ticketId) })
     onChanged()
   }
-  const onError = (e: unknown) => toastError(e, 'Could not update the link')
+  const onError = (e: unknown) =>
+    toastError(
+      e,
+      intl.formatMessage({
+        id: 'admin.inbox.ticketLinks.updateFailed',
+        defaultMessage: 'Could not update the link',
+      })
+    )
 
   const link = useMutation({
     mutationFn: (issue: string) =>
@@ -181,7 +188,16 @@ function TrackerSection({
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button type="button" className={addBtnClass} disabled={create.isPending}>
-            <PlusIcon className="size-4" /> {create.isPending ? 'Creating…' : 'Add issue'}
+            <PlusIcon className="size-4" />{' '}
+            {create.isPending
+              ? intl.formatMessage({
+                  id: 'admin.inbox.ticketTrackerLinks.creating',
+                  defaultMessage: 'Creating…',
+                })
+              : intl.formatMessage({
+                  id: 'admin.inbox.ticketTrackerLinks.addIssue',
+                  defaultMessage: 'Add issue',
+                })}
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
@@ -214,7 +230,16 @@ function TrackerSection({
         disabled={create.isPending}
         className={addBtnClass}
       >
-        <PlusIcon className="size-4" /> {create.isPending ? 'Creating…' : 'Create issue'}
+        <PlusIcon className="size-4" />{' '}
+        {create.isPending
+          ? intl.formatMessage({
+              id: 'admin.inbox.ticketTrackerLinks.creating',
+              defaultMessage: 'Creating…',
+            })
+          : intl.formatMessage({
+              id: 'admin.inbox.ticketTrackerLinks.createIssue',
+              defaultMessage: 'Create issue',
+            })}
       </button>
     ) : null
 

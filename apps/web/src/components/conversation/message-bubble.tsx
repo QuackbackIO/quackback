@@ -15,6 +15,7 @@
  * tokens both bubbles render from (UNIFIED-INBOX-SPEC.md §2.6) — geometry
  * and fill live in one place so the two idioms cannot drift apart.
  */
+import type { IntlShape } from 'react-intl'
 import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { memo, useCallback, useRef, useState } from 'react'
 import {
@@ -79,6 +80,7 @@ import {
 } from '@/components/conversation/conversation-editor-features'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
 import { useLocalDateFormatter } from '@/components/ui/local-date'
+import { AdminSystemNotice } from './admin-system-notice'
 
 /** A message's time of day, e.g. "3:04 PM". */
 const TIME_LABEL: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-digit' }
@@ -115,11 +117,32 @@ function EditedMark({ label = '(edited)', title }: { label?: string; title?: str
   )
 }
 
-function channelDeliveryLabel(delivery: ChannelDelivery): string {
-  const name = getChannelDescriptor(delivery.channel)?.label ?? 'channel'
-  if (delivery.status === 'pending') return `Sending to ${name}`
-  if (delivery.status === 'sent') return `Sent to ${name}`
-  return delivery.error || `Could not send to ${name}`
+function channelDeliveryLabel(delivery: ChannelDelivery, intl: IntlShape): string {
+  const name =
+    getChannelDescriptor(delivery.channel)?.label ??
+    intl.formatMessage({ id: 'admin.inbox.messageBubble.channel', defaultMessage: 'channel' })
+  if (delivery.status === 'pending') {
+    return intl.formatMessage(
+      { id: 'admin.inbox.messageBubble.sendingTo', defaultMessage: 'Sending to {name}' },
+      { name }
+    )
+  }
+  if (delivery.status === 'sent') {
+    return intl.formatMessage(
+      { id: 'admin.inbox.messageBubble.sentTo', defaultMessage: 'Sent to {name}' },
+      { name }
+    )
+  }
+  return (
+    delivery.error ||
+    intl.formatMessage(
+      {
+        id: 'admin.inbox.messageBubble.couldNotSendTo',
+        defaultMessage: 'Could not send to {name}',
+      },
+      { name }
+    )
+  )
 }
 
 function ChannelDeliveryTicks({
@@ -129,7 +152,8 @@ function ChannelDeliveryTicks({
   delivery: ChannelDelivery
   onRetry?: () => void
 }) {
-  const label = channelDeliveryLabel(delivery)
+  const intl = useOptionalIntl()
+  const label = channelDeliveryLabel(delivery, intl)
   const failed = delivery.status === 'failed'
   const icon =
     delivery.status === 'pending' ? (
@@ -191,6 +215,7 @@ function humanizeAttributeKey(key: string): string {
  * never resolved once the customer replied was the bug this fixes).
  */
 function AgentBlockSummary({ block, state }: { block: WorkflowBlockPayload; state?: BlockState }) {
+  const intl = useOptionalIntl()
   const resolved = state === 'chosen' || state === 'superseded'
   switch (block.kind) {
     case 'buttons':
@@ -211,9 +236,15 @@ function AgentBlockSummary({ block, state }: { block: WorkflowBlockPayload; stat
       if (state === 'superseded') return null
       return (
         <p className="mt-1 text-[11px] text-muted-foreground/80">
-          {state === 'chosen'
-            ? `Answered: ${humanizeAttributeKey(block.attributeKey)}`
-            : `Waiting for: ${humanizeAttributeKey(block.attributeKey)}`}
+          {intl.formatMessage(
+            state === 'chosen'
+              ? { id: 'admin.inbox.messageBubble.answered', defaultMessage: 'Answered: {name}' }
+              : {
+                  id: 'admin.inbox.messageBubble.waitingFor',
+                  defaultMessage: 'Waiting for: {name}',
+                },
+            { name: humanizeAttributeKey(block.attributeKey) }
+          )}
         </p>
       )
     case 'csat':
@@ -390,6 +421,8 @@ interface AgentMessageBubbleProps {
    *  noise; internal notes and system events never carry it (their own
    *  markers already say what they are). */
   ticketProvenance?: boolean
+  /** The thread is an issue on a code host: its close and reopen notices read "Issue …". */
+  issueThread?: boolean
   /** Retry a failed GitHub (thread-channel) send. */
   onRetryChannelDelivery?: (messageId: ConversationMessageId) => void
 }
@@ -519,7 +552,15 @@ function MessageEditForm({
           disabled={saving || (empty && !hasAttachments)}
           className="rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
         >
-          {saving ? 'Saving…' : 'Save changes'}
+          {saving
+            ? intl.formatMessage({
+                id: 'admin.inbox.messageBubble.saving',
+                defaultMessage: 'Saving…',
+              })
+            : intl.formatMessage({
+                id: 'admin.inbox.messageBubble.saveChanges',
+                defaultMessage: 'Save changes',
+              })}
         </button>
       </div>
     </div>
@@ -545,6 +586,7 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
   translation,
   blockState,
   ticketProvenance = false,
+  issueThread = false,
   onRetryChannelDelivery,
 }: AgentMessageBubbleProps) {
   const intl = useOptionalIntl()
@@ -557,15 +599,7 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
   // System events (e.g. "assigned to …") are status notices, not messages:
   // centered, no avatar, no actions.
   if (message.senderType === 'system') {
-    return (
-      <div className="flex items-center gap-2 py-1" role="status">
-        <span className="h-px flex-1 bg-border/40" />
-        <span className="whitespace-nowrap px-2 text-[11px] text-muted-foreground">
-          {message.content}
-        </span>
-        <span className="h-px flex-1 bg-border/40" />
-      </div>
-    )
+    return <AdminSystemNotice message={message} issueThread={issueThread} />
   }
 
   // Visitor messages, agent replies, and internal notes all share one chat-
@@ -576,7 +610,11 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
   // through `NoteContent` instead of the reply renderer.
   const isNote = message.isInternal
   const isAgent = message.senderType === 'agent'
-  const authorName = message.author?.displayName ?? (isAgent ? 'Agent' : 'Visitor')
+  const authorName =
+    message.author?.displayName ??
+    (isAgent
+      ? intl.formatMessage({ id: 'admin.inbox.messageBubble.agent', defaultMessage: 'Agent' })
+      : intl.formatMessage({ id: 'admin.inbox.messageBubble.visitor', defaultMessage: 'Visitor' }))
   const isFlagged = message.flaggedAt !== null
   const toolbarPinned = emojiOpen || menuOpen
   // Agent replies, assistant turns, and notes all sit on the agent's side of
@@ -712,8 +750,17 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
                             className="mt-0.5 text-[11px] text-muted-foreground/60 underline decoration-dotted underline-offset-2 transition-colors hover:text-foreground"
                           >
                             {translation.showingOriginal
-                              ? 'Show translation'
-                              : `${translation.label} · Show original`}
+                              ? intl.formatMessage({
+                                  id: 'admin.inbox.messageBubble.showTranslation',
+                                  defaultMessage: 'Show translation',
+                                })
+                              : intl.formatMessage(
+                                  {
+                                    id: 'admin.inbox.messageBubble.showOriginal',
+                                    defaultMessage: '{label} · Show original',
+                                  },
+                                  { label: translation.label }
+                                )}
                           </button>
                         )}
                       </>
@@ -792,7 +839,17 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
                     'flex size-7 items-center justify-center rounded transition-colors hover:bg-muted',
                     isFlagged ? 'text-amber-500' : 'text-muted-foreground hover:text-foreground'
                   )}
-                  aria-label={isFlagged ? 'Remove flag' : 'Flag message'}
+                  aria-label={
+                    isFlagged
+                      ? intl.formatMessage({
+                          id: 'admin.inbox.messageBubble.removeFlag',
+                          defaultMessage: 'Remove flag',
+                        })
+                      : intl.formatMessage({
+                          id: 'admin.inbox.messageBubble.flagMessage',
+                          defaultMessage: 'Flag message',
+                        })
+                  }
                   aria-pressed={isFlagged}
                 >
                   {isFlagged ? (
@@ -827,7 +884,7 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
                       <DropdownMenuItem onClick={() => setEditing(true)}>
                         <PencilIcon className="h-4 w-4" />{' '}
                         {intl.formatMessage({
-                          id: 'admin.inbox.messageBubble.editMessage2',
+                          id: 'admin.inbox.messageBubble.editMessage',
                           defaultMessage: 'Edit message',
                         })}
                       </DropdownMenuItem>
@@ -901,7 +958,7 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
             >
               <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />{' '}
               {intl.formatMessage({
-                id: 'admin.inbox.messageBubble.trackAsFeedback2',
+                id: 'admin.inbox.messageBubble.trackAsFeedbackShort',
                 defaultMessage: 'Track as feedback',
               })}
             </button>
@@ -963,7 +1020,7 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
                 defaultMessage: 'Received by email',
               })}
               title={intl.formatMessage({
-                id: 'admin.inbox.messageBubble.receivedByEmail2',
+                id: 'admin.inbox.messageBubble.receivedByEmail',
                 defaultMessage: 'Received by email',
               })}
             />
@@ -1002,7 +1059,7 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
                 defaultMessage: 'Flagged',
               })}
               title={intl.formatMessage({
-                id: 'admin.inbox.messageBubble.flagged2',
+                id: 'admin.inbox.messageBubble.flagged',
                 defaultMessage: 'Flagged',
               })}
             />

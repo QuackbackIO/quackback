@@ -7,6 +7,7 @@
  * usePendingActionDecision) so the buttons reflect current status rather
  * than the stale snapshot.
  */
+import type { IntlShape, MessageDescriptor } from 'react-intl'
 import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { CheckIcon, XMarkIcon, ShieldExclamationIcon } from '@heroicons/react/24/solid'
 import type { AssistantPendingActionId } from '@quackback/ids'
@@ -14,12 +15,26 @@ import { usePendingActionDecision } from '@/lib/client/hooks/use-pending-action-
 
 /** Terminal-status copy — shown in place of the buttons once a proposal is no
  *  longer decidable. 'proposed' isn't here: that state renders the buttons. */
-const TERMINAL_LABEL: Record<string, string> = {
-  approved: 'Approved',
-  executed: 'Approved and executed',
-  rejected: 'Rejected',
-  expired: 'Expired',
-  failed: 'Failed',
+export const PENDING_ACTION_STATUS_LABELS: Record<string, MessageDescriptor> = {
+  approved: { id: 'admin.inbox.pendingActionCard.status.approved', defaultMessage: 'Approved' },
+  executed: {
+    id: 'admin.inbox.pendingActionCard.status.executed',
+    defaultMessage: 'Approved and executed',
+  },
+  rejected: { id: 'admin.inbox.pendingActionCard.status.rejected', defaultMessage: 'Rejected' },
+  expired: { id: 'admin.inbox.pendingActionCard.status.expired', defaultMessage: 'Expired' },
+  failed: { id: 'admin.inbox.pendingActionCard.status.failed', defaultMessage: 'Failed' },
+}
+
+export const UNABLE_TO_LOAD_STATUS: MessageDescriptor = {
+  id: 'admin.inbox.pendingActionCard.unableToLoad',
+  defaultMessage: 'Unable to load status',
+}
+
+/** A decided action's status in words; a status with no words shows as it is. */
+export function pendingActionStatusText(intl: IntlShape, status: string): string {
+  const label = PENDING_ACTION_STATUS_LABELS[status]
+  return label ? intl.formatMessage(label) : status
 }
 
 export interface PendingActionCardProps {
@@ -105,7 +120,9 @@ export function PendingActionCard({ pendingActionId, summary }: PendingActionCar
         </div>
       ) : (
         <span className="text-[11px] font-medium text-muted-foreground">
-          {data ? (TERMINAL_LABEL[data.status] ?? data.status) : 'Unable to load status'}
+          {data
+            ? pendingActionStatusText(intl, data.status)
+            : intl.formatMessage(UNABLE_TO_LOAD_STATUS)}
         </span>
       )}
       {inlineError && <span className="text-[11px] text-destructive">{inlineError}</span>}

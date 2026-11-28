@@ -138,7 +138,13 @@ export function NewConversationDialog({
       void navigate({ to: '/admin/inbox', search: { c: result.conversation.id } })
     },
     onError: (error) => {
-      toastError(error, 'Failed to send message')
+      toastError(
+        error,
+        intl.formatMessage({
+          id: 'admin.shell.newConversationDialog.sendFailed',
+          defaultMessage: 'Failed to send message',
+        })
+      )
     },
   })
 
@@ -183,8 +189,15 @@ export function NewConversationDialog({
           </DialogTitle>
           <DialogDescription>
             {target
-              ? 'The message opens a conversation and is also emailed to them.'
-              : 'Pick who to message. Users without an email address can’t be reached.'}
+              ? intl.formatMessage({
+                  id: 'admin.shell.newConversationDialog.emailedToo',
+                  defaultMessage: 'The message opens a conversation and is also emailed to them.',
+                })
+              : intl.formatMessage({
+                  id: 'admin.shell.newConversationDialog.pickWho',
+                  defaultMessage:
+                    'Pick who to message. Users without an email address can’t be reached.',
+                })}
           </DialogDescription>
         </DialogHeader>
 
@@ -216,10 +229,18 @@ export function NewConversationDialog({
               <Avatar src={target.image} name={target.name ?? 'User'} className="size-7 text-xs" />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm text-foreground">
-                  {target.name || 'Unnamed user'}
+                  {target.name ||
+                    intl.formatMessage({
+                      id: 'admin.shell.portalUserPicker.unnamed',
+                      defaultMessage: 'Unnamed user',
+                    })}
                 </span>
                 <span className="block truncate text-xs text-muted-foreground">
-                  {realEmail(target.email) ?? 'No email'}
+                  {realEmail(target.email) ??
+                    intl.formatMessage({
+                      id: 'admin.shell.portalUserPicker.noEmail',
+                      defaultMessage: 'No email',
+                    })}
                 </span>
               </span>
             </div>
@@ -274,7 +295,15 @@ export function NewConversationDialog({
               </button>
               <Button onClick={submit} disabled={!canSend}>
                 <PaperAirplaneIcon className="me-1.5 size-4" />
-                {send.isPending ? 'Sending…' : 'Send message'}
+                {send.isPending
+                  ? intl.formatMessage({
+                      id: 'admin.shell.newConversationDialog.sending',
+                      defaultMessage: 'Sending…',
+                    })
+                  : intl.formatMessage({
+                      id: 'admin.shell.newConversationDialog.sendMessage',
+                      defaultMessage: 'Send message',
+                    })}
               </Button>
             </div>
           </div>

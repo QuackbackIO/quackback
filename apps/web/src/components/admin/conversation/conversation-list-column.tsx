@@ -41,52 +41,22 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/shared/utils'
-import { SPAM_REASON_LABELS } from './inbox-labels'
+import { SPAM_REASON_LABELS, formatLabel, previewText } from './inbox-labels'
+import { emptyStateMessage } from './inbox-empty-words'
 import { useActivationAction } from '@/lib/client/hooks/use-activation-action'
 
 /** Ignore scroll-by hovers; only warm a thread the pointer actually rests on. */
 const PREFETCH_DELAY_MS = 120
 
+const VISITOR = { id: 'admin.inbox.conversationListColumn.visitor', defaultMessage: 'Visitor' }
+const NO_MESSAGES = {
+  id: 'admin.inbox.conversationListColumn.noMessages',
+  defaultMessage: 'No messages yet',
+}
+
 /** Stable string id for any inbox item (a conversation or ticket TypeID). */
 function itemId(item: InboxItemDTO): string {
   return item.kind === 'conversation' ? item.conversation.id : item.ticket.id
-}
-
-/** The empty-list message for the active scope + facet. */
-function emptyStateMessage(nav: InboxNavItem, facet: InboxTriageFacet, scopeLabel: string): string {
-  if (nav.kind === 'tag') return `No conversations labelled ${scopeLabel}`
-  if (nav.kind === 'segment') {
-    const part = facet === 'all' ? '' : `${facet} `
-    return `No ${part}conversations from ${scopeLabel}`
-  }
-  if (nav.kind === 'team') {
-    const part = facet === 'all' ? '' : `${facet} `
-    return `No ${part}conversations for ${scopeLabel}`
-  }
-  if (nav.kind === 'custom') return `No conversations match ${scopeLabel}`
-  if (nav.kind === 'view') {
-    const facetPart = facet === 'all' ? '' : `${facet} `
-    switch (nav.view) {
-      case 'mentions':
-        return 'No conversations mention you yet'
-      case 'mine':
-        return `No ${facetPart}conversations assigned to you`
-      case 'unassigned':
-        return `No ${facetPart}unassigned conversations`
-      case 'tickets_all':
-        return `No ${facetPart}tickets`
-      case 'tickets_customer':
-        return `No ${facetPart}customer tickets`
-      case 'tickets_back_office':
-        return `No ${facetPart}back office tickets`
-      case 'tickets_tracker':
-        return `No ${facetPart}trackers`
-    }
-    return `No ${facetPart}conversations`
-  }
-  // Unscoped empty inbox — first-run friendly, not filter-blame.
-  if (facet === 'all') return 'No conversations yet'
-  return `No ${facet} conversations`
 }
 
 const TICKET_TYPE_ICON: Record<TicketType, typeof TicketIcon> = {
@@ -116,6 +86,7 @@ function TicketAssigneeGlyph({
 }: {
   assignee: Extract<InboxItemDTO, { kind: 'ticket' }>['ticket']['assignee']
 }) {
+  const intl = useOptionalIntl()
   if (assignee.principalId) {
     return (
       <Avatar
@@ -128,7 +99,13 @@ function TicketAssigneeGlyph({
   if (assignee.teamId) {
     return (
       <span
-        title={assignee.teamName ?? 'Team'}
+        title={
+          assignee.teamName ??
+          intl.formatMessage({
+            id: 'admin.inbox.conversationListColumn.team',
+            defaultMessage: 'Team',
+          })
+        }
         className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground"
       >
         {nameInitial(assignee.teamName ?? 'T')}
@@ -453,7 +430,7 @@ function EmptyList({
             id: 'inbox.empty.allClear.title',
             defaultMessage: 'Nothing to review',
           })
-        : emptyStateMessage(nav, facet, scopeLabel)
+        : emptyStateMessage(intl, nav, facet, scopeLabel)
   // First-run CTA on the unfiltered main queues (not tickets/labels).
   const showMessengerCta = isMainConversationQueue && !isFiltered && !isAllClear
   return (
@@ -624,13 +601,13 @@ export const ConversationRow = memo(function ConversationRow({
       >
         <Avatar
           src={c.visitor.avatarUrl}
-          name={c.visitor.displayName ?? 'Visitor'}
+          name={c.visitor.displayName ?? intl.formatMessage(VISITOR)}
           className="size-8 shrink-0 text-xs"
         />
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
             <span className="truncate text-sm font-medium">
-              {c.visitor.displayName ?? 'Visitor'}
+              {c.visitor.displayName ?? intl.formatMessage(VISITOR)}
             </span>
             <span className="flex shrink-0 items-center gap-1.5">
               {c.unreadCount > 0 && (
@@ -662,7 +639,9 @@ export const ConversationRow = memo(function ConversationRow({
           ) : (
             <div className="mt-0.5 flex items-center justify-between gap-2">
               <p className="min-w-0 truncate text-xs text-muted-foreground">
-                {c.lastMessagePreview ?? c.subject ?? 'No messages yet'}
+                {c.lastMessagePreview != null
+                  ? previewText(intl, c.lastMessagePreview)
+                  : (c.subject ?? intl.formatMessage(NO_MESSAGES))}
               </p>
               <span className="flex shrink-0 items-center gap-1.5">
                 {/* The Spam view's one row decoration: which rule or classifier
@@ -670,7 +649,7 @@ export const ConversationRow = memo(function ConversationRow({
                     false positive's source without opening it. */}
                 {c.endReason === 'spam' && c.spamReason && (
                   <Badge size="sm" variant="outline">
-                    {intl.formatMessage(SPAM_REASON_LABELS[c.spamReason])}
+                    {formatLabel(intl, SPAM_REASON_LABELS, c.spamReason)}
                   </Badge>
                 )}
                 {c.isTest && (
@@ -706,6 +685,7 @@ const TicketRow = memo(function TicketRow({
   onPrefetch?: (id: string) => void
   onPrefetchCancel?: () => void
 }) {
+  const intl = useOptionalIntl()
   const t = item.ticket
   return (
     <RowShell selected={selected}>
@@ -739,7 +719,9 @@ const TicketRow = memo(function TicketRow({
           </div>
           <div className="mt-0.5 flex items-center justify-between gap-2">
             <p className="min-w-0 truncate text-xs text-muted-foreground">
-              {t.lastMessagePreview ?? 'No messages yet'}
+              {t.lastMessagePreview != null
+                ? previewText(intl, t.lastMessagePreview)
+                : intl.formatMessage(NO_MESSAGES)}
             </p>
             <TimeAgo date={t.updatedAt} short className="shrink-0 text-xs text-muted-foreground" />
           </div>

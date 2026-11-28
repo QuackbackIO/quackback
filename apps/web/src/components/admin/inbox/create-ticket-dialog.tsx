@@ -54,6 +54,11 @@ import {
 } from '@/components/ui/select'
 import { toastError } from '@/lib/client/error-notice'
 
+const CREATE_TICKET = {
+  id: 'admin.shell.createTicketDialog.createTicket',
+  defaultMessage: 'Create ticket',
+}
+
 // Native `<textarea maxLength>` used to silently cap this field; a rich doc
 // can't be truncated mid-node without corrupting it, so the cap is now
 // enforced pre-submit with the same toast the dialog already uses for
@@ -321,7 +326,7 @@ export const CreateTicketDialog = memo(function CreateTicketDialog({
       // the button stays (a transient error may succeed on retry).
       toast.info(
         intl.formatMessage({
-          id: 'admin.shell.createTicketDialog.aiSuggestionsAreUnavailable2',
+          id: 'admin.shell.createTicketDialog.aiSuggestionsAreUnavailable',
           defaultMessage: 'AI suggestions are unavailable. The form is unchanged.',
         })
       )
@@ -409,8 +414,17 @@ export const CreateTicketDialog = memo(function CreateTicketDialog({
                       defaultMessage: 'Test and real conversations need separate tickets.',
                     })
                   : error instanceof Error
-                    ? `Ticket created, but couldn't link it: ${error.message}`
-                    : "Ticket created, but couldn't link it to this conversation"
+                    ? intl.formatMessage(
+                        {
+                          id: 'admin.shell.createTicketDialog.linkFailedReason',
+                          defaultMessage: "Ticket created, but couldn't link it: {reason}",
+                        },
+                        { reason: error.message }
+                      )
+                    : intl.formatMessage({
+                        id: 'admin.shell.createTicketDialog.linkFailed',
+                        defaultMessage: "Ticket created, but couldn't link it to this conversation",
+                      })
               )
             } finally {
               setLinking(false)
@@ -418,7 +432,7 @@ export const CreateTicketDialog = memo(function CreateTicketDialog({
           } else {
             toast.success(
               intl.formatMessage({
-                id: 'admin.shell.createTicketDialog.ticketCreated2',
+                id: 'admin.shell.createTicketDialog.ticketCreated',
                 defaultMessage: 'Ticket created',
               })
             )
@@ -427,7 +441,14 @@ export const CreateTicketDialog = memo(function CreateTicketDialog({
           onCreated(ticket.id)
           onChanged?.()
         },
-        onError: (error) => toastError(error, 'Failed to create ticket'),
+        onError: (error) =>
+          toastError(
+            error,
+            intl.formatMessage({
+              id: 'admin.shell.createTicketDialog.createFailed',
+              defaultMessage: 'Failed to create ticket',
+            })
+          ),
       }
     )
   }
@@ -437,7 +458,12 @@ export const CreateTicketDialog = memo(function CreateTicketDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
-            {fromConversation ? 'Create ticket' : 'New ticket'}
+            {fromConversation
+              ? intl.formatMessage(CREATE_TICKET)
+              : intl.formatMessage({
+                  id: 'admin.shell.createTicketDialog.newTicket',
+                  defaultMessage: 'New ticket',
+                })}
             {suggestedKeys.size > 0 && (
               <span className="ms-2 rounded bg-primary/15 px-1.5 py-0.5 align-middle text-[11px] font-medium text-primary">
                 {intl.formatMessage(
@@ -452,8 +478,14 @@ export const CreateTicketDialog = memo(function CreateTicketDialog({
           </DialogTitle>
           <DialogDescription>
             {fromConversation
-              ? 'Open a trackable ticket for this conversation.'
-              : 'Open a trackable request and set who it is for.'}
+              ? intl.formatMessage({
+                  id: 'admin.shell.createTicketDialog.descFromConversation',
+                  defaultMessage: 'Open a trackable ticket for this conversation.',
+                })
+              : intl.formatMessage({
+                  id: 'admin.shell.createTicketDialog.descNew',
+                  defaultMessage: 'Open a trackable request and set who it is for.',
+                })}
           </DialogDescription>
         </DialogHeader>
 
@@ -481,7 +513,15 @@ export const CreateTicketDialog = memo(function CreateTicketDialog({
                     onClick={runAutoFill}
                     disabled={autoFillLoading}
                   >
-                    {autoFillLoading ? '✨ Suggesting…' : '✨ Auto-fill'}
+                    {autoFillLoading
+                      ? intl.formatMessage({
+                          id: 'admin.shell.createTicketDialog.suggesting',
+                          defaultMessage: '✨ Suggesting…',
+                        })
+                      : intl.formatMessage({
+                          id: 'admin.shell.createTicketDialog.autoFill',
+                          defaultMessage: '✨ Auto-fill',
+                        })}
                   </Button>
                 )}
               </div>
@@ -513,7 +553,7 @@ export const CreateTicketDialog = memo(function CreateTicketDialog({
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground">
                 {intl.formatMessage({
-                  id: 'admin.shell.createTicketDialog.type2',
+                  id: 'admin.shell.createTicketDialog.type',
                   defaultMessage: 'Type',
                 })}
               </label>
@@ -624,7 +664,15 @@ export const CreateTicketDialog = memo(function CreateTicketDialog({
 
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">
-              {fromConversation ? 'Requester' : 'Requester (optional)'}
+              {fromConversation
+                ? intl.formatMessage({
+                    id: 'admin.shell.createTicketDialog.requester',
+                    defaultMessage: 'Requester',
+                  })
+                : intl.formatMessage({
+                    id: 'admin.shell.createTicketDialog.requesterOptional',
+                    defaultMessage: 'Requester (optional)',
+                  })}
             </label>
             {requester ? (
               <div className="flex items-center gap-2.5 rounded-md border border-border/60 bg-muted/20 px-3 py-2">
@@ -635,10 +683,18 @@ export const CreateTicketDialog = memo(function CreateTicketDialog({
                 />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm text-foreground">
-                    {requester.name || 'Unnamed user'}
+                    {requester.name ||
+                      intl.formatMessage({
+                        id: 'admin.shell.portalUserPicker.unnamed',
+                        defaultMessage: 'Unnamed user',
+                      })}
                   </span>
                   <span className="block truncate text-xs text-muted-foreground">
-                    {realEmail(requester.email) ?? 'No email'}
+                    {realEmail(requester.email) ??
+                      intl.formatMessage({
+                        id: 'admin.shell.portalUserPicker.noEmail',
+                        defaultMessage: 'No email',
+                      })}
                   </span>
                 </span>
                 {/* The conversation's visitor is fixed — only the standalone
@@ -696,7 +752,12 @@ export const CreateTicketDialog = memo(function CreateTicketDialog({
             })}
           </Button>
           <Button onClick={submit} disabled={!canCreate}>
-            {create.isPending || linking ? 'Creating…' : 'Create ticket'}
+            {create.isPending || linking
+              ? intl.formatMessage({
+                  id: 'admin.shell.createTicketDialog.creating',
+                  defaultMessage: 'Creating…',
+                })
+              : intl.formatMessage(CREATE_TICKET)}
           </Button>
         </DialogFooter>
       </DialogContent>

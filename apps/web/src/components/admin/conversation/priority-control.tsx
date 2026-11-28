@@ -13,7 +13,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { PRIORITY_LABELS, PRIORITY_PLACEHOLDER } from './inbox-labels'
+import { PRIORITY_LABELS, PRIORITY_PLACEHOLDER, formatLabel } from './inbox-labels'
 import { cn } from '@/lib/shared/utils'
 
 /** A small colored dot for a conversation's priority (hidden for 'none'). */
@@ -33,7 +33,7 @@ export function PriorityDot({
       style={{ backgroundColor: meta.color }}
       aria-label={intl.formatMessage(
         { id: 'admin.inbox.priorityControl.ariaLabel', defaultMessage: '{priority} priority' },
-        { priority: intl.formatMessage(PRIORITY_LABELS[priority]) }
+        { priority: formatLabel(intl, PRIORITY_LABELS, priority) }
       )}
     />
   )
@@ -105,7 +105,9 @@ export const PriorityControl = memo(function PriorityControl({
           className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-muted"
         >
           <PriorityDot priority={value} />
-          {intl.formatMessage(value === 'none' ? PRIORITY_PLACEHOLDER : PRIORITY_LABELS[value])}
+          {value === 'none'
+            ? intl.formatMessage(PRIORITY_PLACEHOLDER)
+            : formatLabel(intl, PRIORITY_LABELS, value)}
           <ChevronDownIcon className="size-3.5" />
         </button>
       </DropdownMenuTrigger>

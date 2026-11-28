@@ -65,7 +65,13 @@ export const AddParticipantDialog = memo(function AddParticipantDialog({
       setEmail('')
       void participantsQuery.refetch()
     } catch (err) {
-      toastError(err, 'Failed to add customer')
+      toastError(
+        err,
+        intl.formatMessage({
+          id: 'admin.inbox.addParticipantDialog.addFailed',
+          defaultMessage: 'Failed to add customer',
+        })
+      )
     } finally {
       setPending(false)
     }
@@ -84,7 +90,13 @@ export const AddParticipantDialog = memo(function AddParticipantDialog({
       )
       void participantsQuery.refetch()
     } catch (err) {
-      toastError(err, 'Failed to remove customer')
+      toastError(
+        err,
+        intl.formatMessage({
+          id: 'admin.inbox.addParticipantDialog.removeFailed',
+          defaultMessage: 'Failed to remove customer',
+        })
+      )
     } finally {
       setRemovingId(null)
     }
@@ -134,8 +146,12 @@ export const AddParticipantDialog = memo(function AddParticipantDialog({
               {participants.map((p) => (
                 <li key={p.principalId} className="flex items-center gap-2">
                   <span className="min-w-0 flex-1 truncate">
-                    {p.displayName ? `${p.displayName} — ` : ''}
-                    {p.email ?? 'no email'}
+                    {p.displayName ? `${p.displayName} · ` : ''}
+                    {p.email ??
+                      intl.formatMessage({
+                        id: 'admin.inbox.addParticipantDialog.noEmail',
+                        defaultMessage: 'no email',
+                      })}
                   </span>
                   <button
                     type="button"
@@ -170,7 +186,15 @@ export const AddParticipantDialog = memo(function AddParticipantDialog({
           )}
           <DialogFooter>
             <Button type="submit" size="sm" disabled={pending || !email.trim()}>
-              {pending ? 'Adding…' : 'Add customer'}
+              {pending
+                ? intl.formatMessage({
+                    id: 'admin.inbox.addParticipantDialog.adding',
+                    defaultMessage: 'Adding…',
+                  })
+                : intl.formatMessage({
+                    id: 'admin.inbox.addParticipantDialog.addCustomer',
+                    defaultMessage: 'Add customer',
+                  })}
             </Button>
           </DialogFooter>
         </form>

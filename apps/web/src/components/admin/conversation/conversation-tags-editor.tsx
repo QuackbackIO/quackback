@@ -378,7 +378,15 @@ export const ConversationTagsEditor = memo(function ConversationTagsEditor({
               )}
               {!loadingTags && matching.length === 0 && !showCreate && (
                 <p className="px-1.5 py-1 text-xs text-muted-foreground">
-                  {q ? 'No matching tags' : 'No tags yet. Type to create one'}
+                  {q
+                    ? intl.formatMessage({
+                        id: 'admin.inbox.conversationTagsEditor.noMatching',
+                        defaultMessage: 'No matching tags',
+                      })
+                    : intl.formatMessage({
+                        id: 'admin.inbox.conversationTagsEditor.noTagsYet',
+                        defaultMessage: 'No tags yet. Type to create one',
+                      })}
                 </p>
               )}
             </div>

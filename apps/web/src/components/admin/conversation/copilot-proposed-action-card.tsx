@@ -10,15 +10,11 @@ import type { AssistantPendingActionId } from '@quackback/ids'
 import { Button } from '@/components/ui/button'
 import { usePendingActionDecision } from '@/lib/client/hooks/use-pending-action-decision'
 import type { CopilotProposedAction } from '@/lib/shared/assistant/copilot-contract'
-
-/** Terminal-status copy for a decided proposal that ISN'T executed/failed
- *  (those two get their own richer treatment below). Mirrors
- *  pending-action-card.tsx's TERMINAL_LABEL for the states it shares. */
-const PROPOSED_ACTION_TERMINAL_LABEL: Record<string, string> = {
-  approved: 'Approved',
-  rejected: 'Rejected',
-  expired: 'Expired',
-}
+import {
+  PENDING_ACTION_STATUS_LABELS,
+  UNABLE_TO_LOAD_STATUS,
+  pendingActionStatusText,
+} from '@/components/conversation/pending-action-card'
 
 /** Pull a short, human line out of a tool's JSON result, if it offered one
  *  (create_ticket's reference/title, or any tool's own `note`). Returns null
@@ -142,17 +138,24 @@ export function CopilotProposedActionCard({ action }: { action: CopilotProposedA
       ) : data?.status === 'executed' ? (
         <div className="flex items-center gap-1.5 pt-0.5 text-success">
           <CheckCircleIcon className="h-4 w-4 shrink-0" />
-          <span>{formatProposedActionResult(data.result) ?? 'Approved and executed'}</span>
+          <span>
+            {formatProposedActionResult(data.result) ??
+              intl.formatMessage(PENDING_ACTION_STATUS_LABELS.executed!)}
+          </span>
         </div>
       ) : data?.status === 'failed' ? (
         <span className="pt-0.5 text-destructive">
-          {formatProposedActionFailure(data.result) ?? 'This action could not be completed.'}
+          {formatProposedActionFailure(data.result) ??
+            intl.formatMessage({
+              id: 'admin.inbox.copilotProposedActionCard.notCompleted',
+              defaultMessage: 'This action could not be completed.',
+            })}
         </span>
       ) : (
         <span className="pt-0.5 font-medium text-muted-foreground">
           {data
-            ? (PROPOSED_ACTION_TERMINAL_LABEL[data.status] ?? data.status)
-            : 'Unable to load status'}
+            ? pendingActionStatusText(intl, data.status)
+            : intl.formatMessage(UNABLE_TO_LOAD_STATUS)}
         </span>
       )}
       {inlineError && <span className="text-destructive">{inlineError}</span>}

@@ -186,7 +186,15 @@ function CopilotSourceRow({ citation }: { citation: CopilotCitation }) {
               onClick={copyLink}
               className="pointer-events-auto shrink-0 text-[11px] text-primary hover:underline"
             >
-              {copied ? 'Copied' : 'Copy link'}
+              {copied
+                ? intl.formatMessage({
+                    id: 'admin.inbox.copilotSources.copied',
+                    defaultMessage: 'Copied',
+                  })
+                : intl.formatMessage({
+                    id: 'admin.inbox.copilotSources.copyLink',
+                    defaultMessage: 'Copy link',
+                  })}
             </button>
           </span>
         ) : (

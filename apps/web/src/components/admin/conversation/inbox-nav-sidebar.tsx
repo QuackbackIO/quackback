@@ -523,7 +523,15 @@ function ViewsFilterSection({
                       ) : (
                         <StarIcon className="h-4 w-4" />
                       )}
-                      {v.isPinned ? 'Unpin' : 'Pin'}
+                      {v.isPinned
+                        ? intl.formatMessage({
+                            id: 'admin.inbox.inboxNavSidebar.unpin',
+                            defaultMessage: 'Unpin',
+                          })
+                        : intl.formatMessage({
+                            id: 'admin.inbox.inboxNavSidebar.pin',
+                            defaultMessage: 'Pin',
+                          })}
                     </DropdownMenuItem>
                     {onEditView && (
                       <DropdownMenuItem onClick={() => onEditView(v)}>
@@ -813,7 +821,7 @@ export function InboxScopeMenu({
           <>
             <DropdownMenuLabel className="text-muted-foreground">
               {intl.formatMessage({
-                id: 'admin.inbox.inboxNavSidebar.conversations2',
+                id: 'admin.inbox.inboxNavSidebar.conversations',
                 defaultMessage: 'Conversations',
               })}
             </DropdownMenuLabel>
@@ -851,7 +859,7 @@ export function InboxScopeMenu({
             {showConversations && <DropdownMenuSeparator />}
             <DropdownMenuLabel className="text-muted-foreground">
               {intl.formatMessage({
-                id: 'admin.inbox.inboxNavSidebar.tickets2',
+                id: 'admin.inbox.inboxNavSidebar.tickets',
                 defaultMessage: 'Tickets',
               })}
             </DropdownMenuLabel>
@@ -884,7 +892,7 @@ export function InboxScopeMenu({
             </DropdownMenuItem>
             <ScopeMenuSection
               title={intl.formatMessage({
-                id: 'admin.inbox.inboxNavSidebar.teams2',
+                id: 'admin.inbox.inboxNavSidebar.teams',
                 defaultMessage: 'Teams',
               })}
               rows={teamRows}
@@ -900,7 +908,7 @@ export function InboxScopeMenu({
             <DropdownMenuSeparator />
             <DropdownMenuLabel className="text-muted-foreground">
               {intl.formatMessage({
-                id: 'admin.inbox.inboxNavSidebar.savedViews2',
+                id: 'admin.inbox.inboxNavSidebar.savedViews',
                 defaultMessage: 'Saved views',
               })}
             </DropdownMenuLabel>
@@ -927,7 +935,7 @@ export function InboxScopeMenu({
           <>
             <ScopeMenuSection
               title={intl.formatMessage({
-                id: 'admin.inbox.inboxNavSidebar.tags2',
+                id: 'admin.inbox.inboxNavSidebar.tags',
                 defaultMessage: 'Tags',
               })}
               rows={tags ?? []}
@@ -937,7 +945,7 @@ export function InboxScopeMenu({
             />
             <ScopeMenuSection
               title={intl.formatMessage({
-                id: 'admin.inbox.inboxNavSidebar.segments2',
+                id: 'admin.inbox.inboxNavSidebar.segments',
                 defaultMessage: 'Segments',
               })}
               rows={segments ?? []}

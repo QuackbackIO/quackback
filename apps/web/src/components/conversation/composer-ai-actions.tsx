@@ -222,7 +222,14 @@ export const ComposerAiActions = memo(function ComposerAiActions({
             variant="ghost"
             size="sm"
             disabled={transforming || !hasDraftText}
-            title={!hasDraftText ? 'Write a draft first' : undefined}
+            title={
+              !hasDraftText
+                ? intl.formatMessage({
+                    id: 'admin.inbox.composerAiActions.writeDraftFirst',
+                    defaultMessage: 'Write a draft first',
+                  })
+                : undefined
+            }
           >
             {transforming ? (
               <ArrowPathIcon className="size-4 animate-spin" />

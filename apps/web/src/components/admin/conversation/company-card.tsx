@@ -63,7 +63,15 @@ export const CompanyCard = memo(function CompanyCard({
             variant="ghost"
             onClick={() => setEditing((open) => !open)}
           >
-            {editing ? 'Cancel' : 'Add company'}
+            {editing
+              ? intl.formatMessage({
+                  id: 'admin.inbox.companyCard.cancel',
+                  defaultMessage: 'Cancel',
+                })
+              : intl.formatMessage({
+                  id: 'admin.inbox.companyCard.addCompany',
+                  defaultMessage: 'Add company',
+                })}
           </Button>
         </div>
         {editing && (
@@ -97,7 +105,7 @@ export const CompanyCard = memo(function CompanyCard({
         <BuildingOffice2Icon className="h-4 w-4" />
         <span>
           {intl.formatMessage({
-            id: 'admin.inbox.companyCard.company2',
+            id: 'admin.inbox.companyCard.company',
             defaultMessage: 'Company',
           })}
         </span>
@@ -205,7 +213,13 @@ function QualificationEditor({
       })
       onQualified()
     } catch (error) {
-      toastError(error, 'Failed to set company')
+      toastError(
+        error,
+        intl.formatMessage({
+          id: 'admin.inbox.companyCard.setFailed',
+          defaultMessage: 'Failed to set company',
+        })
+      )
     } finally {
       setSaving(false)
     }
@@ -269,7 +283,12 @@ function QualificationEditor({
         disabled={!name.trim() || saving}
         onClick={() => void commit()}
       >
-        {saving ? 'Saving…' : 'Save company'}
+        {saving
+          ? intl.formatMessage({ id: 'admin.inbox.companyCard.saving', defaultMessage: 'Saving…' })
+          : intl.formatMessage({
+              id: 'admin.inbox.companyCard.saveCompany',
+              defaultMessage: 'Save company',
+            })}
       </Button>
       <p className="text-[11px] leading-snug text-muted-foreground">
         {intl.formatMessage({

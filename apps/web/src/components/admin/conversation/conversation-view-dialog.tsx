@@ -24,7 +24,6 @@ import {
   type ConversationAttributeOperator,
 } from '@/lib/shared/conversation/views'
 import { TICKET_TYPES, TICKET_STATUS_CATEGORIES, TICKET_STAGES } from '@/lib/shared/db-types'
-import { TICKET_STATUS_CATEGORY_LABELS, DEFAULT_TICKET_STAGE_LABELS } from '@/lib/shared/tickets'
 import { ticketTypeLabel } from '@/components/admin/inbox/ticket-chips'
 import {
   useConversationTagsWithCounts,
@@ -60,7 +59,14 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/shared/utils'
 import { toastError } from '@/lib/client/error-notice'
-import { SORT_LABELS } from './inbox-labels'
+import {
+  PRIORITY_LABELS,
+  SORT_LABELS,
+  STATUS_LABELS,
+  TICKET_CATEGORY_LABELS,
+  TICKET_STAGE_LABELS,
+  formatLabel,
+} from './inbox-labels'
 
 // A rule while being edited: value may be blank until the teammate picks one.
 // The fixed-field shape carries a plain string value (as before); an attribute
@@ -131,18 +137,27 @@ function defaultAttributeRule(key: string, def?: ConversationAttributeItem): Att
   return { field: 'attribute', key, operator, value }
 }
 
-const FIELD_LABELS: Record<ConversationViewRuleField, string> = {
-  status: 'Status',
-  priority: 'Priority',
-  assignee: 'Assignee',
-  team: 'Team',
-  tag: 'Tag',
-  source: 'Channel',
-  waiting: 'Waiting',
-  kind: 'Item kind',
-  ticket_type: 'Ticket type',
-  ticket_status_category: 'Ticket status',
-  ticket_stage: 'Ticket stage',
+const FIELD_LABELS: Record<ConversationViewRuleField, MessageDescriptor> = {
+  status: { id: 'admin.inbox.conversationViewDialog.field.status', defaultMessage: 'Status' },
+  priority: { id: 'admin.inbox.conversationViewDialog.field.priority', defaultMessage: 'Priority' },
+  assignee: { id: 'admin.inbox.conversationViewDialog.field.assignee', defaultMessage: 'Assignee' },
+  team: { id: 'admin.inbox.conversationViewDialog.field.team', defaultMessage: 'Team' },
+  tag: { id: 'admin.inbox.conversationViewDialog.field.tag', defaultMessage: 'Tag' },
+  source: { id: 'admin.inbox.conversationViewDialog.field.source', defaultMessage: 'Channel' },
+  waiting: { id: 'admin.inbox.conversationViewDialog.field.waiting', defaultMessage: 'Waiting' },
+  kind: { id: 'admin.inbox.conversationViewDialog.field.kind', defaultMessage: 'Item kind' },
+  ticket_type: {
+    id: 'admin.inbox.conversationViewDialog.field.ticketType',
+    defaultMessage: 'Ticket type',
+  },
+  ticket_status_category: {
+    id: 'admin.inbox.conversationViewDialog.field.ticketStatusCategory',
+    defaultMessage: 'Ticket status',
+  },
+  ticket_stage: {
+    id: 'admin.inbox.conversationViewDialog.field.ticketStage',
+    defaultMessage: 'Ticket stage',
+  },
 }
 
 const STATUS_OPTIONS = ['open', 'snoozed', 'closed']
@@ -168,13 +183,6 @@ const KIND_OPTIONS: Array<{ value: string; label: MessageDescriptor }> = [
     label: { id: 'admin.inbox.conversationViewDialog.ticket', defaultMessage: 'Ticket' },
   },
 ]
-const TICKET_STATUS_CATEGORY_OPTIONS: Array<{ value: string; label: string }> =
-  TICKET_STATUS_CATEGORIES.map((c) => ({ value: c, label: TICKET_STATUS_CATEGORY_LABELS[c] }))
-const TICKET_STAGE_OPTIONS: Array<{ value: string; label: string }> = TICKET_STAGES.map((s) => ({
-  value: s,
-  label: DEFAULT_TICKET_STAGE_LABELS[s],
-}))
-
 /** The default value for a freshly-picked field (so a new row is valid at once). */
 function defaultValueFor(field: ConversationViewRuleField): string {
   switch (field) {
@@ -324,12 +332,30 @@ export const ConversationViewDialog = memo(function ConversationViewDialog({
     },
     onSuccess: (viewId) => {
       invalidate()
-      toast.success(editing ? 'View updated' : 'View created')
+      toast.success(
+        intl.formatMessage(
+          editing
+            ? {
+                id: 'admin.inbox.conversationViewDialog.viewUpdated',
+                defaultMessage: 'View updated',
+              }
+            : {
+                id: 'admin.inbox.conversationViewDialog.viewCreated',
+                defaultMessage: 'View created',
+              }
+        )
+      )
       onOpenChange(false)
       onSaved?.(viewId)
     },
     onError: (error) => {
-      toastError(error, 'Failed to save view')
+      toastError(
+        error,
+        intl.formatMessage({
+          id: 'admin.inbox.conversationViewDialog.saveFailed',
+          defaultMessage: 'Failed to save view',
+        })
+      )
     },
   })
 
@@ -364,7 +390,13 @@ export const ConversationViewDialog = memo(function ConversationViewDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{editing ? 'Edit view' : 'New view'}</DialogTitle>
+          <DialogTitle>
+            {intl.formatMessage(
+              editing
+                ? { id: 'admin.inbox.conversationViewDialog.editView', defaultMessage: 'Edit view' }
+                : { id: 'admin.inbox.conversationViewDialog.newView', defaultMessage: 'New view' }
+            )}
+          </DialogTitle>
           <DialogDescription>
             {intl.formatMessage({
               id: 'admin.inbox.conversationViewDialog.aSavedSetOf',
@@ -416,7 +448,7 @@ export const ConversationViewDialog = memo(function ConversationViewDialog({
                       <SelectGroup>
                         {visibleFields.map((f) => (
                           <SelectItem key={f} value={f}>
-                            {FIELD_LABELS[f]}
+                            {intl.formatMessage(FIELD_LABELS[f])}
                           </SelectItem>
                         ))}
                       </SelectGroup>
@@ -539,7 +571,19 @@ export const ConversationViewDialog = memo(function ConversationViewDialog({
             })}
           </Button>
           <Button onClick={() => save.mutate()} disabled={!canSave}>
-            {save.isPending ? 'Saving…' : editing ? 'Save changes' : 'Create view'}
+            {intl.formatMessage(
+              save.isPending
+                ? { id: 'admin.inbox.conversationViewDialog.saving', defaultMessage: 'Saving…' }
+                : editing
+                  ? {
+                      id: 'admin.inbox.conversationViewDialog.saveChanges',
+                      defaultMessage: 'Save changes',
+                    }
+                  : {
+                      id: 'admin.inbox.conversationViewDialog.createView',
+                      defaultMessage: 'Create view',
+                    }
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -573,9 +617,9 @@ function RuleValue({
   }
   const options: Array<{ value: string; label: string }> =
     rule.field === 'status'
-      ? STATUS_OPTIONS.map((v) => ({ value: v, label: v }))
+      ? STATUS_OPTIONS.map((v) => ({ value: v, label: formatLabel(intl, STATUS_LABELS, v) }))
       : rule.field === 'priority'
-        ? PRIORITY_OPTIONS.map((v) => ({ value: v, label: v }))
+        ? PRIORITY_OPTIONS.map((v) => ({ value: v, label: formatLabel(intl, PRIORITY_LABELS, v) }))
         : rule.field === 'assignee'
           ? ASSIGNEE_OPTIONS.map((o) => ({ value: o.value, label: intl.formatMessage(o.label) }))
           : rule.field === 'source'
@@ -587,9 +631,15 @@ function RuleValue({
                 : rule.field === 'ticket_type'
                   ? TICKET_TYPES.map((t) => ({ value: t, label: ticketTypeLabel(t, intl) }))
                   : rule.field === 'ticket_status_category'
-                    ? TICKET_STATUS_CATEGORY_OPTIONS
+                    ? TICKET_STATUS_CATEGORIES.map((c) => ({
+                        value: c,
+                        label: intl.formatMessage(TICKET_CATEGORY_LABELS[c]),
+                      }))
                     : rule.field === 'ticket_stage'
-                      ? TICKET_STAGE_OPTIONS
+                      ? TICKET_STAGES.map((st) => ({
+                          value: st,
+                          label: intl.formatMessage(TICKET_STAGE_LABELS[st]),
+                        }))
                       : teams.map((t) => ({ value: t.id, label: t.name }))
 
   const empty = options.length === 0

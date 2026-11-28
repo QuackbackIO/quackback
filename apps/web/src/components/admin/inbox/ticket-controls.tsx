@@ -4,6 +4,7 @@
  * server fn and reuses the conversation inbox's menu pieces (PriorityMenuItems,
  * AssigneeMenuItems, the team roster) so tickets and conversations feel the same.
  */
+import type { MessageDescriptor } from 'react-intl'
 import { useOptionalIntl } from '@/components/ui/use-optional-intl'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -166,10 +167,15 @@ export function TicketAssigneeControl({
     )
 
   const label = assignee.principalId
-    ? (assignee.displayName ?? 'Assigned')
+    ? (assignee.displayName ??
+      intl.formatMessage({ id: 'admin.inbox.ticketControls.assigned', defaultMessage: 'Assigned' }))
     : assignee.teamId
-      ? (assignee.teamName ?? 'Team')
-      : 'Unassigned'
+      ? (assignee.teamName ??
+        intl.formatMessage({ id: 'admin.inbox.ticketControls.team', defaultMessage: 'Team' }))
+      : intl.formatMessage({
+          id: 'admin.inbox.ticketControls.unassigned',
+          defaultMessage: 'Unassigned',
+        })
 
   return (
     <DropdownMenu>
@@ -286,11 +292,11 @@ export function TicketPriorityControl({
 // control reads.
 // ---------------------------------------------------------------------------
 
-const REASON_LABEL: Record<TicketWatcher['reason'], string> = {
-  requester: 'Requester',
-  assignee: 'Assignee',
-  replier: 'Replied',
-  manual: 'Added',
+const REASON_LABEL: Record<TicketWatcher['reason'], MessageDescriptor> = {
+  requester: { id: 'admin.inbox.ticketControls.reason.requester', defaultMessage: 'Requester' },
+  assignee: { id: 'admin.inbox.ticketControls.reason.assignee', defaultMessage: 'Assignee' },
+  replier: { id: 'admin.inbox.ticketControls.reason.replier', defaultMessage: 'Replied' },
+  manual: { id: 'admin.inbox.ticketControls.reason.manual', defaultMessage: 'Added' },
 }
 
 function isMuted(mutedUntil: Date | string | null | undefined): boolean {
@@ -313,7 +319,14 @@ export function TicketWatchControl({ ticketId }: { ticketId: TicketId }) {
   const muted = isMuted(status?.mutedUntil)
   const pending = watch.isPending || unwatch.isPending || mute.isPending || unmute.isPending
 
-  const label = muted ? 'Muted' : watching ? 'Watching' : 'Watch'
+  const label = muted
+    ? intl.formatMessage({ id: 'admin.inbox.ticketControls.muted', defaultMessage: 'Muted' })
+    : watching
+      ? intl.formatMessage({
+          id: 'admin.inbox.ticketControls.watching',
+          defaultMessage: 'Watching',
+        })
+      : intl.formatMessage({ id: 'admin.inbox.ticketControls.watch', defaultMessage: 'Watch' })
   const TriggerIcon = muted ? BellSlashIcon : BellIcon
 
   return (
@@ -526,14 +539,18 @@ function WatcherManagePanel({
                 />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[13px] font-medium text-foreground">
-                    {w.displayName ?? 'Unnamed'}
+                    {w.displayName ??
+                      intl.formatMessage({
+                        id: 'admin.inbox.ticketControls.unnamed',
+                        defaultMessage: 'Unnamed',
+                      })}
                   </p>
                 </div>
                 {isMuted(w.mutedUntil) && (
                   <BellSlashIcon className="size-3.5 shrink-0 text-muted-foreground/60" />
                 )}
                 <Badge size="sm" variant="subtle">
-                  {REASON_LABEL[w.reason]}
+                  {REASON_LABEL[w.reason] ? intl.formatMessage(REASON_LABEL[w.reason]) : w.reason}
                 </Badge>
                 <button
                   type="button"
@@ -590,14 +607,31 @@ function WatcherManagePanel({
           <SelectTrigger size="sm" className="w-full">
             <PlusIcon className="size-3.5 shrink-0" />
             <SelectValue
-              placeholder={candidates.length === 0 ? 'No more teammates' : 'Add watcher…'}
+              placeholder={
+                candidates.length === 0
+                  ? intl.formatMessage({
+                      id: 'admin.inbox.ticketControls.noMoreTeammates',
+                      defaultMessage: 'No more teammates',
+                    })
+                  : intl.formatMessage({
+                      id: 'admin.inbox.ticketControls.addWatcherPlaceholder',
+                      defaultMessage: 'Add watcher…',
+                    })
+              }
             />
           </SelectTrigger>
           <SelectContent className="max-h-56">
             {candidates.map((m) => (
               <SelectItem key={m.id} value={m.id}>
                 <Avatar src={m.image} name={m.name ?? m.email} className="size-5 text-xs" />
-                <span className="truncate">{m.name ?? m.email ?? 'Unnamed'}</span>
+                <span className="truncate">
+                  {m.name ??
+                    m.email ??
+                    intl.formatMessage({
+                      id: 'admin.inbox.ticketControls.unnamed',
+                      defaultMessage: 'Unnamed',
+                    })}
+                </span>
               </SelectItem>
             ))}
           </SelectContent>
