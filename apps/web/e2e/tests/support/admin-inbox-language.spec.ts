@@ -100,6 +100,7 @@ async function galleryShots(page: Page, words: Record<string, string>, language:
   // Wide enough for the details panel beside the thread.
   await page.setViewportSize({ width: 1920, height: 1000 })
   await openInbox(page, words)
+  await expect(page.locator('[data-message-id]').first()).toBeVisible({ timeout: 15_000 })
   await snap(page, `inbox-${language}-details`)
   await tryClick('tab', words['admin.inbox.inboxDetailPanel.copilot'])
   await page.waitForTimeout(500)
