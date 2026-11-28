@@ -62,7 +62,7 @@ function loadAdmin(opts: {
       user: { id: 'user_1', name: 'Ada', email: 'ada@example.com', image: null },
       principal: { id: 'principal_1', chatAvailability: 'online' },
       permissions: caller.permissions,
-      acceptLanguageLocale: 'en',
+      personLocale: 'en',
       cloudEnabled: opts.planBilling ?? true,
       settings: { featureFlags: DEFAULT_FEATURE_FLAGS },
     },

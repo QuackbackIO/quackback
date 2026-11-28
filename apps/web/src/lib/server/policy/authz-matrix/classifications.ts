@@ -610,6 +610,12 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   'lib/server/functions/teammate-preferences.ts::setMyLanguagePreferenceFn': END_USER(
     'teammate sets their own language preference'
   ),
+  'lib/server/functions/person-language.ts::getMyLanguageFn': END_USER(
+    'a signed-in person reads their own page language'
+  ),
+  'lib/server/functions/person-language.ts::setMyLanguageFn': END_USER(
+    'a signed-in person sets their own page language'
+  ),
 
   // MCP transport entry: a valid key authenticates; per-tool scopes authorize
   // (see MCP_TOOL_NAMES). Not a permission gate on its own.

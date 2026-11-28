@@ -43,14 +43,10 @@ import { detectFirstWin } from '@/lib/server/activation-wins'
 import { getCloudConfig } from '@/lib/server/domains/settings/cloud/cloud.service'
 import { PLAN_CATALOGUE } from '@/lib/server/domains/settings/cloud/cloud.types'
 import { sendOnboardingNudgeEmail, sendOnboardingWelcomeEmail } from '@quackback/email'
-import type { SupportedLocale } from '@/lib/shared/i18n'
+import { resolvePersonLocale, type SupportedLocale } from '@/lib/shared/i18n'
+import { getMainLanguage } from '@/lib/server/domains/settings/settings.service'
 import type { OnboardingOutcome } from '@/lib/shared/db-types'
-import {
-  nudgeEmailCopy,
-  readyEmailCopy,
-  recipientLocale,
-  type EmailStep,
-} from './onboarding-email-copy'
+import { nudgeEmailCopy, readyEmailCopy, type EmailStep } from './onboarding-email-copy'
 
 const log = logger.child({ component: 'onboarding-emails' })
 
@@ -134,6 +130,7 @@ export async function onboardingEmailContext(
       email: user.email,
       userName: user.name,
       preferredLanguage: user.preferredLanguage,
+      detectedLocale: user.detectedLocale,
       accountLocale: user.locale,
     })
     .from(principal)
@@ -184,8 +181,16 @@ export async function onboardingEmailContext(
       ? (steps.find((task) => !task.isReady && isOpenLaunchStep(task)) ?? null)
       : path.next
   const name = (person.userName || person.displayName || '').trim().split(/\s+/)[0] || null
-  // Their own choice first, then their sign-in provider's, then their browser's.
-  const locale = recipientLocale(person.preferredLanguage, person.accountLocale, requestLocale)
+  // A teammate's email order: their own choice, the browser of the request
+  // that sent it (when one did), the detected and sign-in provider's
+  // languages, then the main language.
+  const locale = resolvePersonLocale({
+    chosen: person.preferredLanguage,
+    acceptLanguage: requestLocale,
+    detected: person.detectedLocale,
+    accountLocale: person.accountLocale,
+    mainLanguage: await getMainLanguage(),
+  })
   return {
     ok: true,
     context: {

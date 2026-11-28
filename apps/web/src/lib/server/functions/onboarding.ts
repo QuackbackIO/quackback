@@ -207,12 +207,16 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
     }
   )
 
-/** The language this request's browser asked for, or undefined outside a request. */
+/**
+ * The product language this request's browser asked for, or undefined when it
+ * asked for none the product has (or outside a request), so the steps after
+ * the browser's still decide.
+ */
 async function requestLocale() {
   try {
     const { getRequestHeaders } = await import('@tanstack/react-start/server')
-    const { resolveLocale } = await import('@/lib/shared/i18n')
-    return resolveLocale(getRequestHeaders().get('accept-language'))
+    const { matchAcceptLanguage } = await import('@/lib/shared/i18n')
+    return matchAcceptLanguage(getRequestHeaders().get('accept-language')) ?? undefined
   } catch {
     return undefined
   }

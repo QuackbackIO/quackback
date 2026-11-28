@@ -522,6 +522,10 @@ async function createAuth() {
       additionalFields: {
         locale: { type: 'string', required: false, input: false },
         imageKey: { type: 'string', required: false, input: false },
+        // The language the person chose in Preferences. Carried on the
+        // session's user so every page reads it with the session, no read
+        // of its own; written only by the Preferences server function.
+        preferredLanguage: { type: 'string', required: false, input: false },
       },
     },
 

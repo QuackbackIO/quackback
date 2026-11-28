@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it } from 'vitest'
+import { useEffect } from 'react'
 import { act, cleanup, render, screen } from '@testing-library/react'
 import { FormattedMessage, IntlProvider } from 'react-intl'
 import en from '@/locales/en.json'
@@ -88,5 +89,34 @@ describe('AreaMessages', () => {
     expect(await screen.findByText('Szukaj artykułów...', {}, { timeout: 5000 })).toBeTruthy()
     expect(fallbackShown).toBe(true)
     expect(screen.queryByText('loading')).toBeNull()
+  })
+})
+
+describe('AreaMessages across a change of language', () => {
+  // A page that replays an entrance when it mounts must not mount again when
+  // the reader picks another language: English, then the seeded area, then
+  // the whole catalog, all render the same page in place.
+  it('keeps the page mounted from English to a seeded area to the whole catalog', () => {
+    let mounts = 0
+    function Page() {
+      useEffect(() => {
+        mounts += 1
+      }, [])
+      return <Placeholder />
+    }
+    const area = { 'portal.hc.search.placeholder': 'Suche nach Artikeln...' }
+    const page = (locale: string, catalog: Record<string, string>) => (
+      <IntlProvider locale={locale} defaultLocale="en" messages={catalog} onError={() => {}}>
+        <AreaMessages area="helpCenter" messages={locale === 'en' ? undefined : area}>
+          <Page />
+        </AreaMessages>
+      </IntlProvider>
+    )
+    const { rerender } = render(page('en', seeded))
+    rerender(page('de', seeded))
+    expect(screen.getByText('Suche nach Artikeln...')).toBeTruthy()
+    rerender(page('de', { ...seeded, ...area }))
+    expect(screen.getByText('Suche nach Artikeln...')).toBeTruthy()
+    expect(mounts).toBe(1)
   })
 })

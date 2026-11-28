@@ -5,7 +5,8 @@ import {
   normalizeLocale,
   resolveLocale,
   matchAcceptLanguage,
-  resolveRequestLocale,
+  resolvePersonLocale,
+  everyoneLocale,
   isRtlLocale,
   SUPPORTED_LOCALES,
   DEFAULT_LOCALE,
@@ -514,31 +515,57 @@ describe('matchAcceptLanguage', () => {
   })
 })
 
-describe('resolveRequestLocale', () => {
-  const german = { mainLanguage: 'de', visitorLanguage: 'own' as const }
-  const germanForAll = { mainLanguage: 'de', visitorLanguage: 'main' as const }
+describe('resolvePersonLocale', () => {
+  const german = { mainLanguage: 'de' }
 
-  it('uses the browser language when the product has it', () => {
-    expect(resolveRequestLocale('fr-FR,fr;q=0.9', german)).toBe('fr')
-    expect(resolveRequestLocale('fr-FR', german, { forVisitor: true })).toBe('fr')
+  it('takes the host page locale first, before a chosen language', () => {
+    expect(resolvePersonLocale({ hostLocale: 'es', chosen: 'fr', ...german })).toBe('es')
   })
 
-  it('uses the main language, not English, when the product lacks the browser language', () => {
-    expect(resolveRequestLocale('ja-JP', german)).toBe('de')
-    expect(resolveRequestLocale(null, german)).toBe('de')
-    expect(resolveRequestLocale('ja-JP', { mainLanguage: 'en', visitorLanguage: 'own' })).toBe('en')
+  it("takes the person's chosen language before the visitor rule and the browser", () => {
+    expect(
+      resolvePersonLocale({ chosen: 'fr', everyone: 'de', acceptLanguage: 'nl', ...german })
+    ).toBe('fr')
   })
 
-  it('gives every visitor the main language when the workspace chose that', () => {
-    expect(resolveRequestLocale('fr-FR', germanForAll, { forVisitor: true })).toBe('de')
-    // Not a visitor's page (admin): the browser language still counts.
-    expect(resolveRequestLocale('fr-FR', germanForAll)).toBe('fr')
+  it('takes the main language for everyone before the browser', () => {
+    expect(resolvePersonLocale({ everyone: 'de', acceptLanguage: 'fr-FR' })).toBe('de')
   })
 
-  it("lets a host page's explicit language win", () => {
-    expect(resolveRequestLocale('fr-FR', germanForAll, { explicit: 'es', forVisitor: true })).toBe(
-      'es'
-    )
-    expect(resolveRequestLocale('fr-FR', german, { explicit: 'xx' })).toBe('fr')
+  it('takes the browser language before the detected and sign-in provider languages', () => {
+    expect(
+      resolvePersonLocale({ acceptLanguage: 'fr-FR,fr;q=0.9', detected: 'nl', accountLocale: 'pl' })
+    ).toBe('fr')
+  })
+
+  it('takes the detected language before the sign-in provider language', () => {
+    expect(resolvePersonLocale({ detected: 'nl', accountLocale: 'pl', ...german })).toBe('nl')
+  })
+
+  it('takes the sign-in provider language before the main language', () => {
+    expect(resolvePersonLocale({ accountLocale: 'pl-PL', ...german })).toBe('pl')
+  })
+
+  it('takes the main language, not English, when no step has a language', () => {
+    expect(resolvePersonLocale({ acceptLanguage: 'ja-JP', ...german })).toBe('de')
+    expect(resolvePersonLocale({ ...german })).toBe('de')
+  })
+
+  it('ends at English', () => {
+    expect(resolvePersonLocale({})).toBe('en')
+    expect(resolvePersonLocale({ mainLanguage: 'xx' })).toBe('en')
+  })
+
+  it('skips a step whose language the product does not have', () => {
+    expect(resolvePersonLocale({ hostLocale: 'xx', chosen: 'ja', acceptLanguage: 'fr' })).toBe('fr')
+    expect(resolvePersonLocale({ chosen: 'en-GB', ...german })).toBe('en')
+    expect(resolvePersonLocale({ detected: 'ja', accountLocale: 'uk-UA', ...german })).toBe('uk')
+  })
+})
+
+describe('everyoneLocale', () => {
+  it('names the main language only when the workspace shows it to every visitor', () => {
+    expect(everyoneLocale({ mainLanguage: 'de', visitorLanguage: 'main' })).toBe('de')
+    expect(everyoneLocale({ mainLanguage: 'de', visitorLanguage: 'own' })).toBeNull()
   })
 })

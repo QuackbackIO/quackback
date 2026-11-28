@@ -74,7 +74,7 @@ function buildRouter(locale: SupportedLocale | undefined) {
     routeTree: rootRoute.addChildren([
       onboardingRoute.addChildren([layoutRoute.addChildren([stepRoute])]),
     ]),
-    context: { queryClient: new QueryClient(), acceptLanguageLocale: locale },
+    context: { queryClient: new QueryClient(), personLocale: locale },
     history: createMemoryHistory({ initialEntries: ['/onboarding/account'] }),
     defaultErrorComponent: ({ error }) => (
       <div data-testid="route-error">{error instanceof Error ? error.message : String(error)}</div>

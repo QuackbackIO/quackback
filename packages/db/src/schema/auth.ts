@@ -175,6 +175,13 @@ export const user = pgTable(
     // X-Country-Code) on session creation. NULL when no header is
     // present — local dev or deployments without a geo-aware proxy.
     country: text('country'),
+    // The language the person's browser (or the host page's widget locale)
+    // asked for at their latest sign-in or widget identify: one of the
+    // product's languages, never inferred from location. Emails use it when
+    // the person has not chosen a language; pages never read it.
+    detectedLocale: text('detected_locale'),
+    // When `detected_locale` last changed.
+    detectedLocaleAt: timestamp('detected_locale_at', { withTimezone: true }),
     // Stable external identity for widget-identified visitors: the verified JWT
     // `sub` (the host app's durable user id). Set ONLY on the verified ssoToken
     // identify path so a visitor is recognized on a new device even after an

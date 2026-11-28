@@ -47,7 +47,7 @@ async function loadAdmin(queryClient: QueryClient) {
       queryClient,
       user: { id: 'user_1', name: 'Ada', email: 'ada@example.com', image: null },
       principal: { id: 'principal_1', chatAvailability: 'online' },
-      acceptLanguageLocale: 'en',
+      personLocale: 'en',
     },
     location: { pathname: '/admin/inbox' },
   })

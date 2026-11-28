@@ -27,7 +27,7 @@ export const Route = createFileRoute('/device')({
   // entry bundle every page loads, and only the device page needs the rest.
   loader: async ({ context }) => {
     const { loadDeviceMessages } = await import('@/components/device/device-messages')
-    return loadDeviceMessages(context.acceptLanguageLocale)
+    return loadDeviceMessages(context.personLocale)
   },
   component: DeviceRoute,
 })

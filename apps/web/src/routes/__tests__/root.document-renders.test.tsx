@@ -68,7 +68,7 @@ function bootstrap(themeCookie: 'light' | 'dark', settings: Record<string, unkno
     prefersColorScheme: null,
     managedFieldPaths: [],
     registeredAuthProviders: [],
-    acceptLanguageLocale: 'en',
+    personLocale: 'en',
     updateBannerDismissedVersion: null,
     billingEnabled: false,
     cloudEnabled: false,

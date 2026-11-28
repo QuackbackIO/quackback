@@ -152,6 +152,8 @@ export async function getPortalUserDetail(
         hasSignedIn: hasSignedInSql(),
         contactEmail: principal.contactEmail,
         country: user.country,
+        preferredLanguage: user.preferredLanguage,
+        detectedLocale: user.detectedLocale,
         joinedAt: principal.createdAt,
         createdAt: user.createdAt,
       })
@@ -385,6 +387,7 @@ export async function getPortalUserDetail(
       isLead: principalData.principalType === 'anonymous',
       contactEmail: realEmail(principalData.contactEmail),
       country: principalData.country,
+      language: { chosen: principalData.preferredLanguage, detected: principalData.detectedLocale },
       joinedAt: principalData.joinedAt,
       lastSeenAt,
       createdAt: principalData.createdAt,

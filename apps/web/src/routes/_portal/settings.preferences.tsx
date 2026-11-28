@@ -5,7 +5,9 @@ import { PortalPageHeader } from '@/components/public/portal-page-header'
 import { ThemeSwitcher } from '@/components/theme-switcher'
 import { NotificationMatrixForm } from '@/components/settings/notification-matrix-form'
 import { AreaMessages } from '@/components/shared/area-messages'
+import { LanguageSelect } from '@/components/settings/language-select'
 import { getNotificationPreferencesFn } from '@/lib/server/functions/user'
+import { getMyLanguageFn } from '@/lib/server/functions/person-language'
 import { DEFAULT_LOCALE, seedAreaMessages } from '@/lib/shared/i18n'
 
 export const Route = createFileRoute('/_portal/settings/preferences')({
@@ -14,18 +16,19 @@ export const Route = createFileRoute('/_portal/settings/preferences')({
     // a separate post-hydration request redoing the session/principal lookup
     // this document response already resolves for the parent layout. Its
     // strings, which only this page shows, load with it.
-    const [notificationPreferences, messages] = await Promise.all([
+    const [notificationPreferences, language, messages] = await Promise.all([
       getNotificationPreferencesFn(),
+      getMyLanguageFn(),
       seedAreaMessages(context.visitorLocale ?? DEFAULT_LOCALE, 'notificationPreferences'),
     ])
-    return { notificationPreferences, messages }
+    return { notificationPreferences, language, messages }
   },
   component: PreferencesPage,
 })
 
 function PreferencesPage() {
   const intl = useIntl()
-  const { notificationPreferences, messages } = Route.useLoaderData()
+  const { notificationPreferences, language, messages } = Route.useLoaderData()
 
   return (
     <div className="space-y-6">
@@ -56,7 +59,7 @@ function PreferencesPage() {
         <p className="text-sm text-muted-foreground mb-4">
           <FormattedMessage
             id="portal.settings.preferences.appearance.description"
-            defaultMessage="Customize how the app looks"
+            defaultMessage="Theme and language"
           />
         </p>
         <div className="space-y-3">
@@ -67,6 +70,15 @@ function PreferencesPage() {
             />
           </p>
           <ThemeSwitcher />
+        </div>
+        <div className="mt-5 space-y-3">
+          <p className="text-sm font-medium">
+            <FormattedMessage
+              id="portal.settings.preferences.appearance.languageLabel"
+              defaultMessage="Language"
+            />
+          </p>
+          <LanguageSelect key={language.chosen ?? 'auto'} initial={language} />
         </div>
       </div>
 

@@ -38,7 +38,7 @@ async function renderConsent(
     routeTree: rootRoute.addChildren([consentRoute]),
     context: {
       queryClient: new QueryClient(),
-      acceptLanguageLocale: locale,
+      personLocale: locale,
       ...(email && { session: { user: { email } } as RouterContext['session'] }),
     },
     history: createMemoryHistory({

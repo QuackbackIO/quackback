@@ -402,6 +402,7 @@ describe('replayGateVerdict', () => {
       '0325_language_config',
       '0326_kb_articles_locale',
       '0327_kb_categories_locale',
+      '0328_user_detected_locale',
     ])
     const verdict = replayGateVerdict(before, verdictsFor(replaySetFor(before)), false)
     expect(verdict.ok).toBe(false)

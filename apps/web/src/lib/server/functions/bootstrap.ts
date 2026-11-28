@@ -8,7 +8,7 @@ import {
   type Theme,
 } from '@/lib/shared/theme'
 import { getUpdateBannerDismissedVersionCookie } from '@/lib/shared/update-banner-cookie'
-import { resolveRequestLocale, type SupportedLocale } from '@/lib/shared/i18n'
+import { everyoneLocale, resolvePersonLocale, type SupportedLocale } from '@/lib/shared/i18n'
 import { DEFAULT_LANGUAGE_CONFIG } from '@/lib/server/domains/settings/settings.types'
 import { starPromptAllowedHere } from '@/lib/server/github-star-prompt'
 import { redactSettingsForClient } from '@/lib/shared/redact-portal-config'
@@ -83,13 +83,14 @@ export interface BootstrapData {
    *  `auth_sso` row in `platform_credentials` will NOT include 'sso'
    *  here, so the UI never renders an SSO button that would 404. */
   registeredAuthProviders: string[]
-  /** Locale resolved from the request's Accept-Language header, used by the
-   *  root document to set `<html lang>`/`dir` during SSR. Resolved here so it
-   *  rides the bootstrap request without a separate round-trip. */
-  acceptLanguageLocale: SupportedLocale
+  /** The language for a teammate's page (admin, onboarding): the language
+   *  the signed-in person chose, then the browser language, then the main
+   *  language. Resolved here so it rides the bootstrap request without a
+   *  separate round-trip, and used by the root document for `<html lang>`. */
+  personLocale: SupportedLocale
   /** The language for a visitor's page (portal, help center, status page):
-   *  as `acceptLanguageLocale`, except that a workspace showing its main
-   *  language to every visitor gets the main language. */
+   *  as `personLocale`, except that a workspace showing its main language to
+   *  every visitor gives that before the browser language. */
   visitorLocale: SupportedLocale
   /** Version string the admin update banner was dismissed for, read from the
    *  `update_banner_dismissed_version` cookie, or null if never dismissed.
@@ -178,6 +179,8 @@ async function getSessionAndRole(): Promise<{
   session: Session | null
   role: Role | null
   teammate?: boolean
+  /** The language the person chose in Preferences, read with the session. */
+  chosenLocale?: string | null
 }> {
   // Fast-path for unauthenticated requests: if there's no Cookie header at
   // all the request can't possibly carry a session token, so we can skip
@@ -235,6 +238,7 @@ async function getSessionAndRole(): Promise<{
         isTeamMember(principalRecord.role) &&
         principalRecord.blockedAt == null &&
         !(await isPausedSeat(principalRecord)),
+      chosenLocale: (session.user as { preferredLanguage?: string | null }).preferredLanguage,
     }
   } catch (error) {
     // During SSR, auth might fail due to env var issues
@@ -321,8 +325,11 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
 
   // Single principal read returns both session.principalType + userRole;
   // run in parallel with the settings fetch.
-  const [{ session, role: userRole, teammate }, storedSettings, registeredAuthProviders] =
-    await Promise.all([getSessionAndRole(), getWorkspaceSettings(), getRegisteredAuthProviders()])
+  const [
+    { session, role: userRole, teammate, chosenLocale },
+    storedSettings,
+    registeredAuthProviders,
+  ] = await Promise.all([getSessionAndRole(), getWorkspaceSettings(), getRegisteredAuthProviders()])
   const settings = storedSettings ? await withPausedPresentationHidden(storedSettings) : null
 
   // One-time initialization on first request.
@@ -376,11 +383,21 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
   const updateBannerDismissedVersion = getUpdateBannerDismissedVersionCookie(
     headers.get('cookie') ?? null
   )
-  // The browser language when the product has it, else the main language.
+  // The person's chosen language, then (visitors only) the main language for
+  // everyone, then the browser language, then the main language.
   const languageConfig = settings?.languageConfig ?? DEFAULT_LANGUAGE_CONFIG
   const acceptLanguage = headers.get('accept-language')
-  const acceptLanguageLocale = resolveRequestLocale(acceptLanguage, languageConfig)
-  const visitorLocale = resolveRequestLocale(acceptLanguage, languageConfig, { forVisitor: true })
+  const personLocale = resolvePersonLocale({
+    chosen: chosenLocale,
+    acceptLanguage,
+    mainLanguage: languageConfig.mainLanguage,
+  })
+  const visitorLocale = resolvePersonLocale({
+    chosen: chosenLocale,
+    everyone: everyoneLocale(languageConfig),
+    acceptLanguage,
+    mainLanguage: languageConfig.mainLanguage,
+  })
 
   // Ask for the prefers-color-scheme client hint, so Chromium sends the OS
   // preference with later requests and a `system` theme is rendered here. A
@@ -456,7 +473,7 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
     prefersColorScheme,
     managedFieldPaths: settings?.managedFieldPaths ?? [],
     registeredAuthProviders,
-    acceptLanguageLocale,
+    personLocale,
     visitorLocale,
     updateBannerDismissedVersion,
     billingEnabled: cloud.enabled && (cloud.canUpgrade || cloud.canManageBilling),

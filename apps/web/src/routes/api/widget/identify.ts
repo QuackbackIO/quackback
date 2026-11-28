@@ -33,6 +33,8 @@ import {
 } from '@/lib/server/domains/users/user.attributes'
 import { reconcileWidgetMemberships } from '@/lib/server/domains/segments/segment-membership.service'
 import { captureCountryFromHeaders } from '@/lib/server/auth/country-capture'
+import { detectLocale } from '@/lib/server/auth/locale-capture'
+import { normalizeLocale } from '@/lib/shared/i18n'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'widget-identify' })
@@ -46,6 +48,9 @@ const identifySchema = z.object({
   ssoToken: z.string().min(1),
   // Anonymous→identified merge: previous widget session token
   previousToken: z.string().optional(),
+  // The host page's widget `locale`, recorded as the person's detected
+  // language when the product has it (else the browser's language is).
+  locale: z.string().max(64).optional(),
 })
 
 /** JWT claims that are identity fields or standard JWT metadata — not custom attributes */
@@ -310,6 +315,7 @@ export const Route = createFileRoute('/api/widget/identify')({
         }
 
         const country = captureCountryFromHeaders(request.headers)
+        const detectedLocale = detectLocale(request.headers.get('accept-language'), body.locale)
 
         if (userRecord) {
           // Do not write host-app profile fields onto a teammate row.
@@ -364,6 +370,10 @@ export const Route = createFileRoute('/api/widget/identify')({
             if (country && country !== userRecord.country) {
               updates.country = country
             }
+            if (detectedLocale && detectedLocale !== userRecord.detectedLocale) {
+              updates.detectedLocale = detectedLocale
+              updates.detectedLocaleAt = new Date()
+            }
             if (externalId && userRecord.externalId !== externalId) {
               // Stamp the durable subject: first sight of an unbound account, or
               // a rebind the host app vouched for with `email_verified: true`.
@@ -396,6 +406,8 @@ export const Route = createFileRoute('/api/widget/identify')({
               image: identified.avatarURL ?? null,
               metadata: hasAttrs ? JSON.stringify(validAttrs) : null,
               country: country ?? null,
+              detectedLocale,
+              detectedLocaleAt: detectedLocale ? new Date() : null,
               // Only the verified path supplies a trusted subject; null otherwise.
               externalId,
               createdAt: new Date(),
@@ -520,6 +532,11 @@ export const Route = createFileRoute('/api/widget/identify')({
             email: userRecord.email,
             avatarUrl,
           },
+          // The language the person chose in Preferences, which the widget
+          // shows unless the host page set a locale; null for "Automatic".
+          language: userRecord.preferredLanguage
+            ? normalizeLocale(userRecord.preferredLanguage)
+            : null,
           votedPostIds,
           // Teammates may use the widget as customers but must not mint a
           // portal OTT — that cookie would replace a dashboard login.

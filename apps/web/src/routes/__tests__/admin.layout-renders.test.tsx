@@ -100,7 +100,7 @@ const POST = 'post_01h455vb4pex5vsknk084sn02q'
 
 const rootAnswer = {
   settings: { featureFlags: { ...DEFAULT_FEATURE_FLAGS, supportInbox: true } },
-  acceptLanguageLocale: 'en',
+  personLocale: 'en',
 }
 
 function grant(permissions: PermissionKey[]) {

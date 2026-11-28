@@ -15,7 +15,7 @@ export const Route = createFileRoute('/admin/getting-started')({
   loader: async ({ context }) => {
     // The page's own strings, which the admin seed leaves out.
     const [launchMessages] = await Promise.all([
-      loadLaunchMessages(context.acceptLanguageLocale ?? DEFAULT_LOCALE),
+      loadLaunchMessages(context.personLocale ?? DEFAULT_LOCALE),
       context.queryClient.ensureQueryData(adminQueries.onboardingStatus()),
     ])
     return { launchMessages }

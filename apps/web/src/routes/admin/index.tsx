@@ -28,7 +28,7 @@ import {
 export const Route = createFileRoute('/admin/')({
   loader: async ({ context }) => {
     // Home's own strings, which the admin seed leaves out.
-    const launchMessages = loadLaunchMessages(context.acceptLanguageLocale ?? DEFAULT_LOCALE)
+    const launchMessages = loadLaunchMessages(context.personLocale ?? DEFAULT_LOCALE)
     const admin = isAdmin(context.userRole)
     let modulesChanged = false
     if (admin) {

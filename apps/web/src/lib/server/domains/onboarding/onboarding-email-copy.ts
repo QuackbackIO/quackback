@@ -9,25 +9,9 @@
  */
 import { createIntl, type IntlShape, type MessageDescriptor } from 'react-intl'
 import type { OnboardingEmailContent } from '@quackback/email'
-import {
-  DEFAULT_LOCALE,
-  loadMessages,
-  normalizeLocale,
-  type SupportedLocale,
-} from '@/lib/shared/i18n'
+import { loadMessages, type SupportedLocale } from '@/lib/shared/i18n'
 import { htmlLangDir } from '@/lib/shared/document-locale'
 import type { OnboardingOutcome } from '@/lib/shared/db-types'
-
-/** The first supported language among a person's own and the request's, else English. */
-export function recipientLocale(
-  ...candidates: ReadonlyArray<string | null | undefined>
-): SupportedLocale {
-  for (const candidate of candidates) {
-    const locale = candidate ? normalizeLocale(candidate) : null
-    if (locale) return locale
-  }
-  return DEFAULT_LOCALE
-}
 
 async function intlFor(locale: SupportedLocale): Promise<IntlShape> {
   return createIntl({ locale, messages: await loadMessages(locale), onError: () => {} })
