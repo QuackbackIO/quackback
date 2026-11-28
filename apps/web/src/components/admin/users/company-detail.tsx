@@ -43,6 +43,7 @@ import {
   type CompanyDTO,
 } from '@/lib/server/functions/companies'
 import { formatMonthlySpend, SourceBadge } from '@/components/admin/users/companies-view'
+import { useFormatNumber } from '@/components/ui/format-number'
 import { useCompanyAttributes } from '@/lib/client/hooks/use-company-attributes-queries'
 import { useWorkspaceSettings } from '@/lib/client/hooks/use-root-context'
 import { toastError } from '@/lib/client/error-notice'
@@ -390,6 +391,7 @@ function CompanyAttributesPanel({
   canManage: boolean
 }) {
   const queryClient = useQueryClient()
+  const formatNumber = useFormatNumber()
   const { data: definitions } = useCompanyAttributes()
   const values = company.customAttributes ?? {}
   const [draft, setDraft] = useState<Record<string, string> | null>(null)
@@ -513,7 +515,7 @@ function CompanyAttributesPanel({
             <FieldRow key={def.key} label={def.label}>
               {values[def.key] != null ? (
                 def.type === 'currency' && typeof values[def.key] === 'number' ? (
-                  (values[def.key] as number).toLocaleString('en-US', {
+                  formatNumber(values[def.key] as number, {
                     style: 'currency',
                     currency: def.currencyCode ?? 'USD',
                   })
@@ -544,6 +546,7 @@ interface CompanyDetailProps {
 
 export function CompanyDetail({ companyId, onClose, canManage }: CompanyDetailProps) {
   const queryClient = useQueryClient()
+  const formatNumber = useFormatNumber()
   const keys = companyKeys(companyId)
   const { data: company, isLoading } = useQuery({
     queryKey: keys.detail,
@@ -738,7 +741,9 @@ export function CompanyDetail({ companyId, onClose, canManage }: CompanyDetailPr
               <FieldRow label="Plan">
                 {company.plan ?? <span className="text-muted-foreground/60">Not set</span>}
               </FieldRow>
-              <FieldRow label="Monthly spend">{formatMonthlySpend(company.mrrCents)}</FieldRow>
+              <FieldRow label="Monthly spend">
+                {formatMonthlySpend(company.mrrCents, formatNumber)}
+              </FieldRow>
               <FieldRow label="Size">
                 {company.size ?? <span className="text-muted-foreground/60">Not set</span>}
               </FieldRow>

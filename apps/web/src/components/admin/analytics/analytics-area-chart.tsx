@@ -1,3 +1,4 @@
+import { usePageLocale } from '@/components/ui/local-date'
 import {
   ChartContainer,
   ChartTooltip,
@@ -22,6 +23,7 @@ interface AnalyticsAreaChartProps {
  *  Both the Overview activity chart and the Visitors chart render through
  *  this; they only differ in which row field and metric token they bind. */
 export function AnalyticsAreaChart({ data, dataKey, label, metric }: AnalyticsAreaChartProps) {
+  const locale = usePageLocale()
   const chartConfig: ChartConfig = {
     // ChartContainer turns this into the `--color-${dataKey}` var the Area
     // and gradient read below.
@@ -61,7 +63,7 @@ export function AnalyticsAreaChart({ data, dataKey, label, metric }: AnalyticsAr
           axisLine={false}
           tickMargin={10}
           tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
-          tickFormatter={formatBucketDay}
+          tickFormatter={(day: string) => formatBucketDay(day, locale)}
         />
         <YAxis
           tickLine={false}
@@ -74,7 +76,9 @@ export function AnalyticsAreaChart({ data, dataKey, label, metric }: AnalyticsAr
         />
         <ChartTooltip
           content={
-            <ChartTooltipContent labelFormatter={(label) => formatBucketDay(String(label))} />
+            <ChartTooltipContent
+              labelFormatter={(label) => formatBucketDay(String(label), locale)}
+            />
           }
         />
         <Area

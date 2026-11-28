@@ -168,7 +168,7 @@ const STAMP_FULL: Intl.DateTimeFormatOptions = {
  * wrap mid-word when the table is squeezed by long target IDs.
  */
 function StackedTimestamp({ iso }: { iso: string }) {
-  const format = useLocalDateFormatter('en-US')
+  const format = useLocalDateFormatter()
   return (
     <div className="flex flex-col leading-tight" title={format(iso, STAMP_FULL)}>
       <span>{format(iso, STAMP_DATE)}</span>
@@ -179,7 +179,7 @@ function StackedTimestamp({ iso }: { iso: string }) {
 
 /** One-line timestamp for the stacked mobile rows: "May 13 12:48 AM". */
 function InlineTimestamp({ iso }: { iso: string }) {
-  const format = useLocalDateFormatter('en-US')
+  const format = useLocalDateFormatter()
   return (
     <span title={format(iso, STAMP_FULL)}>
       {format(iso, STAMP_DATE)} {format(iso, STAMP_TIME)}

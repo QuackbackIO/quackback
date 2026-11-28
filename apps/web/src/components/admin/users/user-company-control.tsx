@@ -12,14 +12,7 @@ import {
 } from '@/lib/server/functions/companies'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/shared/utils'
-
-function formatMrr(mrrCents: number): string {
-  return (mrrCents / 100).toLocaleString('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 0,
-  })
-}
+import { useFormatNumber } from '@/components/ui/format-number'
 
 /**
  * Attach / edit the company a person belongs to, from the People profile. The
@@ -34,6 +27,7 @@ export function UserCompanyControl({
   canManage: boolean
 }) {
   const queryClient = useQueryClient()
+  const formatNumber = useFormatNumber()
   const [open, setOpen] = useState(false)
   const [filter, setFilter] = useState('')
   const [busy, setBusy] = useState(false)
@@ -100,7 +94,14 @@ export function UserCompanyControl({
   const matches = companies.filter((c) => c.name.toLowerCase().includes(query))
   const exactMatch = companies.some((c) => c.name.toLowerCase() === query)
 
-  const mrr = current?.mrrCents != null ? formatMrr(current.mrrCents) : null
+  const mrr =
+    current?.mrrCents != null
+      ? formatNumber(current.mrrCents / 100, {
+          style: 'currency',
+          currency: 'USD',
+          maximumFractionDigits: 0,
+        })
+      : null
   const planLine = [current?.plan, mrr ? `${mrr}/mo` : null].filter(Boolean).join(' · ')
 
   const picker = (

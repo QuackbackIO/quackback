@@ -114,9 +114,15 @@ describe('a live domain whose ownership record went missing', () => {
 
   it('says when the record has to be back by', () => {
     expect(
-      ownershipWarning({ domain: 'acme.com', ownershipDeadline: '2026-11-17T10:00:00.000Z' })
+      ownershipWarning({ domain: 'acme.com', ownershipDeadline: '2026-11-17T10:00:00.000Z' }, 'en')
     ).toBe('Add this record back by November 17, 2026 to keep sending from acme.com.')
-    expect(ownershipWarning({ domain: 'acme.com', ownershipDeadline: null })).toBeNull()
+    expect(ownershipWarning({ domain: 'acme.com', ownershipDeadline: null }, 'en')).toBeNull()
+  })
+
+  it("words the date in the page's language", () => {
+    expect(
+      ownershipWarning({ domain: 'acme.com', ownershipDeadline: '2026-11-17T10:00:00.000Z' }, 'de')
+    ).toBe('Add this record back by 17. November 2026 to keep sending from acme.com.')
   })
 
   it('still names the ownership record as the one to fix', () => {

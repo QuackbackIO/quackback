@@ -10,11 +10,10 @@ import {
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useFormatNumber } from '@/components/ui/format-number'
 import { EmptyState } from '@/components/shared/empty-state'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { helpCenterQueries } from '@/lib/client/queries/help-center'
-
-const numberFormatter = new Intl.NumberFormat('en-US')
 
 /**
  * Most-searched visitor queries over the trailing 30 days, ranked by volume.
@@ -22,6 +21,7 @@ const numberFormatter = new Intl.NumberFormat('en-US')
  * visitors looked for and never found.
  */
 export function SearchTermsTable() {
+  const formatNumber = useFormatNumber()
   const { data: rows, isLoading } = useQuery(helpCenterQueries.searchTerms())
 
   return (
@@ -82,15 +82,13 @@ export function SearchTermsTable() {
                     </div>
                   </TableCell>
                   <TableCell className="text-right tabular-nums text-foreground">
-                    {numberFormatter.format(row.searches)}
+                    {formatNumber(row.searches)}
                   </TableCell>
                   <TableCell
                     className="text-right tabular-nums text-muted-foreground"
                     data-testid={`search-term-misses-${row.normalizedQuery}`}
                   >
-                    {row.zeroResultSearches > 0
-                      ? numberFormatter.format(row.zeroResultSearches)
-                      : '-'}
+                    {row.zeroResultSearches > 0 ? formatNumber(row.zeroResultSearches) : '-'}
                   </TableCell>
                   <TableCell className="text-right text-muted-foreground">
                     <TimeAgo date={row.lastSearchedAt} />

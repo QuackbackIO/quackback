@@ -33,6 +33,7 @@ import { Link } from '@tanstack/react-router'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { Button } from '@/components/ui/button'
 import { NewButton } from '@/components/shared/new-button'
+import { useLocalDateFormatter } from '@/components/ui/local-date'
 import type { PostStatusId, PostId, RoadmapId } from '@quackback/ids'
 
 /**
@@ -47,6 +48,7 @@ function BodyPortal({ children }: { children: ReactNode }) {
 }
 
 export function RoadmapAdmin() {
+  const formatDate = useLocalDateFormatter()
   const navigate = useNavigate({ from: Route.fullPath })
   const search = Route.useSearch()
 
@@ -262,11 +264,11 @@ export function RoadmapAdmin() {
                         title={bucket.label}
                         subtitle={
                           bucket.targetMonth
-                            ? `Sets ETA to ${new Intl.DateTimeFormat('en-US', {
+                            ? `Sets ETA to ${formatDate(bucket.targetMonth, {
                                 month: 'short',
                                 year: 'numeric',
                                 timeZone: 'UTC',
-                              }).format(new Date(bucket.targetMonth))}`
+                              })}`
                             : 'Clears ETA'
                         }
                         color={bucket.noEta ? '#6b7280' : '#3b82f6'}

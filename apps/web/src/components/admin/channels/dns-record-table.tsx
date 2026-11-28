@@ -5,6 +5,7 @@
  * Names are relative to the zone the domain sits in, since most DNS hosts
  * append it: the domain itself, or the parent that holds a subdomain.
  */
+import { usePageLocale } from '@/components/ui/local-date'
 import {
   DnsRecordTable,
   type DnsRecordRow,
@@ -77,13 +78,14 @@ export function SendingRecordTable({
   domain: SendingDomainDTO
   phase: DomainPhase
 }) {
+  const locale = usePageLocale()
   return (
     <DnsRecordTable
       records={domain.dnsRecords.map((r): DnsRecordRow => {
         // The doubled-name fix names what the form appended, which is the zone.
         const status = recordStatus(r, { domain: zoneOf(domain), phase })
         // A live domain's missing ownership record says when it has to be back by.
-        const warning = provesOwnership(domain, r) ? ownershipWarning(domain) : null
+        const warning = provesOwnership(domain, r) ? ownershipWarning(domain, locale) : null
         if (warning && status.state === 'problem') status.fix = warning
         return {
           label: recordLabel(r, signingMode(domain)),

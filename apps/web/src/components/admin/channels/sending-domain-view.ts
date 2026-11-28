@@ -67,13 +67,15 @@ export function provesOwnership(
 
 /**
  * The line for a live domain whose ownership record has gone missing: the
- * date it has to be back by. Null when the record is in place.
+ * date it has to be back by, in `locale` (the page's language) and UTC, so
+ * the server and the browser word it alike. Null when the record is in place.
  */
 export function ownershipWarning(
-  domain: Pick<SendingDomainDTO, 'domain' | 'ownershipDeadline'>
+  domain: Pick<SendingDomainDTO, 'domain' | 'ownershipDeadline'>,
+  locale: string
 ): string | null {
   if (!domain.ownershipDeadline) return null
-  const by = new Intl.DateTimeFormat('en', { dateStyle: 'long', timeZone: 'UTC' }).format(
+  const by = new Intl.DateTimeFormat(locale, { dateStyle: 'long', timeZone: 'UTC' }).format(
     new Date(domain.ownershipDeadline)
   )
   return `Add this record back by ${by} to keep sending from ${domain.domain}.`
