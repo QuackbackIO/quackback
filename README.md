@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://quackback.io">
+  <a href="https://quackback.io?utm_source=github&utm_medium=readme">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset=".github/readme/hero-dark.svg" />
       <img src=".github/readme/hero-light.svg" width="100%" alt="Quackback: help customers today, know what to build next. Support inbox, help center, status page, feedback boards, roadmap and changelog." />
@@ -20,12 +20,12 @@
 </p>
 
 <p align="center">
-  <a href="https://quackback.io/demo">Product tour</a> &middot;
+  <a href="https://quackback.io/demo?utm_source=github&utm_medium=readme">Product tour</a> &middot;
   <a href="https://feedback.quackback.io">Our live board</a> &middot;
   <a href="#self-host">Self-host with Docker</a> &middot;
   <a href="https://quackback.io/compare?utm_source=github&utm_medium=readme">Compare</a> &middot;
   <a href="https://feedback.quackback.io/hc">Docs</a> &middot;
-  <a href="https://quackback.io">Website</a>
+  <a href="https://quackback.io?utm_source=github&utm_medium=readme">Website</a>
 </p>
 
 <p align="center">
@@ -93,7 +93,7 @@ Use all of it or only the parts you need. Setup asks which, and you can switch m
 
 ### Quackback Cloud
 
-[Start a free trial](https://app.quackback.io/signup?plan=pro&from=github-readme-get-started&utm_source=github&utm_medium=readme): 14 days of Pro, no card needed. We host, back up and update it, and one flat price per workspace includes your team's seats. See [pricing](https://quackback.io/pricing).
+[Start a free trial](https://app.quackback.io/signup?plan=pro&from=github-readme-get-started&utm_source=github&utm_medium=readme): 14 days of Pro, no card needed. We host, back up and update it, and one flat price per workspace includes your team's seats. See [pricing](https://quackback.io/pricing?utm_source=github&utm_medium=readme).
 
 ### Self-host
 
