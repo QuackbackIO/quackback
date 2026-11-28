@@ -134,7 +134,7 @@ Quackback.init({
     'nl' |
     'pl' |
     'th' |
-    'uk', // override auto-detect
+    'uk', // each user's own language in your app; leave out for a fixed one (see Language)
   identity: { ssoToken }, // bundle identify into init
   tracking: true, // false = no pageview beacons or new device id until tracking(true)
   whatsNew: true, // false = no "What's new" card on this page; the badge is unchanged
@@ -142,6 +142,18 @@ Quackback.init({
 ```
 
 Theme colors and tab visibility come from your Quackback admin (Admin → Settings → Widget).
+
+### Language
+
+The widget picks its language in this order: the `locale` you pass, the language the identified person chose in their Quackback preferences, the workspace's main language when the workspace shows it to every visitor, the visitor's browser language, then the workspace's main language.
+
+Pass `locale` only when it is each user's own language in your app, for example from their profile or your page's `lang`. Then the widget matches the app around it, and Quackback records it as an identified person's detected language. Emails use it when the person has not chosen a language and the workspace does not show its main language to everyone. If your app has one fixed language for everyone, leave `locale` out: a fixed value would hide each visitor's browser language and the language they chose in Quackback.
+
+```ts
+Quackback.init({ instanceUrl, locale: currentUser.locale }) // each user's own language, or leave it out
+```
+
+A language Quackback does not have falls through to the next step, so any BCP-47 tag is safe to pass.
 
 ### Visitor analytics and consent
 

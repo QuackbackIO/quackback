@@ -45,6 +45,8 @@ export const JSON_COLUMNS = [
   'widgetConfig',
   'portalConfig',
   'metadata',
+  'languageConfig',
+  'helpCenterConfig',
 ] as const
 export const SCALAR_COLUMNS = ['name', 'logoKey', 'faviconKey'] as const
 export type SettingsStorageColumn = (typeof JSON_COLUMNS)[number] | (typeof SCALAR_COLUMNS)[number]

@@ -18,12 +18,31 @@ import { ForbiddenError } from '@/lib/shared/errors'
 import { getHelpCenterConfig } from '@/lib/server/domains/settings/settings.service'
 import { getPlanLimits } from './plan-limits.service'
 import { currentPlanName, onThePlan } from './plan-limits.copy'
+import { parsePlanLimitsState } from './plan-limits.rules'
 
 const log = logger.child({ component: 'plan-limits' })
 
 /** The additional languages past a cap that counts the default language as one. */
 export function extraHelpCenterLocales(additional: readonly string[], cap: number): string[] {
   return additional.slice(Math.max(0, cap - 1))
+}
+
+/**
+ * The additional languages held, from a stored plan limits state already in
+ * hand (inside a settings transaction, say): the same answer as
+ * {@link heldHelpCenterLocales}, without recounting. Empty during the grace,
+ * and when the languages fit the cap.
+ */
+export function heldHelpCenterLocalesIn(input: {
+  planLimitsState: unknown
+  additional: readonly string[]
+  cap: number | null
+  now: Date
+}): string[] {
+  if (input.cap === null || 1 + input.additional.length <= input.cap) return []
+  const state = parsePlanLimitsState(input.planLimitsState)
+  if (!state || input.now.getTime() < Date.parse(state.graceEndsAt)) return []
+  return extraHelpCenterLocales(input.additional, input.cap)
 }
 
 /** The additional languages held now. Empty unless the cap is enforced. Fails open. */

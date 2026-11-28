@@ -74,6 +74,8 @@ export interface BuildAssistantPromptInput {
   config: AssistantPromptConfig
   /** A normalized platform value, never a name copied from a conversation. */
   workspaceName: string
+  /** The workspace's main language, for a question whose language cannot be told. */
+  mainLanguage?: string
   /** The actual post-policy tool set assembled for this turn. */
   tools: readonly AssistantPromptTool[]
   /** One line per enabled+assigned skill for this agent. */
@@ -343,7 +345,8 @@ function composeAssistantSystemMessages(
     buildPlatformPolicyMessage(
       rolePolicy.responseContract,
       rolePolicy.responseExample,
-      input.surface
+      input.surface,
+      input.mainLanguage
     ),
     buildAssistantRoleProfile(input.role, input),
     buildToolGuidanceMessage(input.role, input.tools, agentKind),

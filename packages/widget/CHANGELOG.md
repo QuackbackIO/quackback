@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The `locale` option is documented as each user's own language: it wins over the person's language in Quackback and the visitor's browser, and an identified person's `locale` is recorded as their detected language, which emails use when the person has not chosen a language and the workspace does not show its main language to everyone. Leave it out when your app has one fixed language. The README's new Language section gives the order.
 - Screen readers hear the launcher as "Open help" (or your launcher label) with the unread count, for example "Open help, 2 unread", and "Close help" while the panel is open, in the visitor's language when `init` passes a `locale`. The panel is announced as a dialog named in the same language.
 - Opening the panel from the launcher or your own help button moves keyboard focus into it, and closing it returns focus to whatever opened it (or to the launcher if that is gone). An `open()` call while the visitor is typing in a field leaves their focus there, and in browsers that report user activation, so does an open on a timer or a route change.
 - The desktop panel is taller (up to 704px) and narrower windows shrink it to fit, with rounder corners and a softer shadow. The launcher keeps the same shadow after a hover.

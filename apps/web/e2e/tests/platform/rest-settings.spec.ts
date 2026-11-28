@@ -22,7 +22,15 @@ import { adminApi, missingScope, roleKeyOf, uuid } from '../../product/api-rest-
 
 test.describe.configure({ timeout: 60_000 })
 
-const AREA_IDS = ['branding', 'changelog', 'messenger', 'modules', 'office_hours', 'portal']
+const AREA_IDS = [
+  'branding',
+  'changelog',
+  'languages',
+  'messenger',
+  'modules',
+  'office_hours',
+  'portal',
+]
 const SETTINGS = ['read:settings', 'write:settings']
 
 async function readArea(api: APIRequestContext, area: string): Promise<Wire> {
@@ -382,6 +390,54 @@ test.describe('REST settings: workspace-wide areas', () => {
         )
         await expectJson(await api.get('/api/v1/help-center/categories'), 200)
       })
+      await api.dispose()
+    }
+  )
+})
+
+test.describe('REST settings: languages', () => {
+  test(
+    'API-R-180 the languages area shows the main language to every visitor and keeps a glossary',
+    { tag: ['@core', '@isolated'] },
+    async ({ playwright, baseURL, people, browser }) => {
+      test.skip(!ISOLATED, 'runs in product-isolated')
+      const { api } = await adminApi(playwright, baseURL, people, { scopes: SETTINGS })
+      await withSettings(
+        {
+          language_config: { mainLanguage: 'de', visitorLanguage: 'own' },
+          help_center_config: { 'autoTranslate.protectedTerms': [] },
+        },
+        async () => {
+          const before = await readArea(api, 'languages')
+          expect(before.value).toMatchObject({ mainLanguage: 'de', visitorLanguage: 'own' })
+          const applied = await expectJson(
+            await patchArea(
+              api,
+              'languages',
+              { visitorLanguage: 'main', glossary: ['Quackback'] },
+              before.revision
+            ),
+            200
+          )
+          expect(applied.data.status).toBe('applied')
+          expect((await readArea(api, 'languages')).value).toMatchObject({
+            visitorLanguage: 'main',
+            glossary: ['Quackback'],
+          })
+
+          // A visitor whose browser asks for English now gets the main language.
+          const context = await browser.newContext({
+            extraHTTPHeaders: { 'Accept-Language': 'en-US,en;q=0.9' },
+          })
+          try {
+            const page = await context.newPage()
+            await page.goto(`${baseURL}/`)
+            await expect(page.locator('html')).toHaveAttribute('lang', 'de')
+          } finally {
+            await context.close()
+          }
+        }
+      )
       await api.dispose()
     }
   )

@@ -8,6 +8,7 @@ vi.mock('@/lib/server/widget/portal-gate', () => ({
 }))
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   getFeatureFlags: (...args: unknown[]) => mockGetFeatureFlags(...args),
+  getMainLanguage: async () => 'de',
 }))
 
 const mockRetrieve = vi.fn()

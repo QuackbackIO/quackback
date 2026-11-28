@@ -149,6 +149,7 @@ export const SETTINGS_REGISTRY: Record<SettingsArea, SettingsAreaEntry> = {
   messenger: define('messenger'),
   modules: define('modules'),
   changelog: define('changelog'),
+  languages: define('languages'),
 }
 
 /** The entry for an area id, or a not-found error for one the registry does not have. */

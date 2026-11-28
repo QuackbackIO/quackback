@@ -901,8 +901,11 @@ export async function updateLanguageConfig(
         .where(eq(settings.id, org.id))
       return { next, swappedArticleIds: moved.swappedArticleIds }
     })
-    // After the commit: the global pool cannot be used inside the locked write.
-    refreshArticleEmbeddings(swappedArticleIds)
+    // After the commit: the global pool cannot be used inside the locked
+    // write, and must read the swapped articles. Inside a caller's
+    // transaction that is the caller's commit.
+    const { afterSettingsCommit } = await import('./settings.after-commit')
+    afterSettingsCommit(options.executor, () => refreshArticleEmbeddings(swappedArticleIds))
     return next
   } catch (error) {
     if (error instanceof ValidationError) throw error

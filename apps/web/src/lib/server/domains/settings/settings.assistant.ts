@@ -28,6 +28,7 @@ import {
 import { ConflictError, ForbiddenError, InternalError, NotFoundError } from '@/lib/shared/errors'
 import { z } from 'zod'
 import { invalidateSettingsCache, requireSettingsCached } from './settings.helpers'
+import { mainLanguageOfRow } from './main-language'
 
 const log = logger.child({ component: 'settings-assistant' })
 
@@ -71,6 +72,8 @@ export type AssistantConfigFallbackReason = 'invalid_assistant_config'
 
 export interface AssistantRuntimeConfigState extends AssistantConfigState {
   workspaceName: string
+  /** The workspace's main language: Quackback AI answers in it when it cannot tell the question's. */
+  mainLanguage: string
   configFallbackReason?: AssistantConfigFallbackReason
 }
 
@@ -112,6 +115,7 @@ export async function getAssistantRuntimeConfig(): Promise<AssistantRuntimeConfi
   const runtimeFields = {
     revision: row.assistantConfigRevision,
     workspaceName: row.name,
+    mainLanguage: mainLanguageOfRow(row),
   }
   if (parsed.success) {
     return {

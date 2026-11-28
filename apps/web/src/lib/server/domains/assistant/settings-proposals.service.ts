@@ -46,6 +46,8 @@ import { updateFeatureFlags } from '@/lib/server/domains/settings/settings.servi
 import { updateWidgetConfig } from '@/lib/server/domains/settings/settings.widget'
 import { updateOfficeHoursSchedule } from '@/lib/server/domains/settings/settings.office-hours'
 import { updateChangelogSettings } from '@/lib/server/domains/settings/settings.changelog'
+import { writeLanguagesArea } from '@/lib/server/domains/settings/settings.languages-area'
+import { LANGUAGES_HELP_CENTER_FIELDS } from '@/lib/shared/languages-settings'
 import {
   deepMerge,
   parseJsonOrNull,
@@ -101,6 +103,7 @@ export async function prepareSettingsChanges(
 }
 
 const MESSENGER_SWITCH = 'messenger.enabled'
+const MAIN_LANGUAGE = 'languages.mainLanguage'
 
 /**
  * Messenger is live when Support is on, the widget is on and its Messages tab
@@ -202,7 +205,27 @@ async function writeArea(
     case 'changelog':
       await updateChangelogSettings(settingsPatchSchemas.changelog.parse(patch), options)
       break
+    case 'languages':
+      await writeLanguagesArea(tx, settingsPatchSchemas.languages.parse(patch))
+      break
   }
+}
+/** The permissions a caller needs to make, or undo, one change. */
+async function requireChangePermissions(
+  tx: Transaction,
+  actor: Actor,
+  change: Pick<SettingsChange, 'area' | 'path'>
+): Promise<void> {
+  await requireAreaPermission(
+    actor,
+    change.area,
+    tx,
+    change.area === 'branding' && change.path[0] === 'logoKey'
+      ? PERMISSIONS.SETTINGS_MANAGE
+      : AREAS[change.area].permission
+  )
+  if (change.area === 'languages' && LANGUAGES_HELP_CENTER_FIELDS.has(change.path[0]!))
+    await requireAreaPermission(actor, change.area, tx, PERMISSIONS.HELP_CENTER_MANAGE)
 }
 export async function applySettingsChangesInTransaction(
   tx: Transaction,
@@ -216,14 +239,7 @@ export async function applySettingsChangesInTransaction(
   if (!before) throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
   const patches = new Map<SettingsArea, Record<string, unknown>>()
   for (const change of selected) {
-    await requireAreaPermission(
-      actor,
-      change.area,
-      tx,
-      change.area === 'branding' && change.path[0] === 'logoKey'
-        ? PERMISSIONS.SETTINGS_MANAGE
-        : AREAS[change.area].permission
-    )
+    await requireChangePermissions(tx, actor, change)
     if (change.area === 'portal') assertWorkspaceNameWritable(before)
     if (
       !equal(at(areaValues(before, change.area), change.path) ?? null, change.before) ||
@@ -260,7 +276,11 @@ export async function applySettingsChangesInTransaction(
     kind: 'settings',
     version: 1,
     changes: selected,
-    storageEffects: settingsStorageEffects(before, after),
+    // A new main language moves help center content, which restoring the
+    // settings columns cannot move back: that change is made again instead.
+    storageEffects: selected.some((change) => change.id === MAIN_LANGUAGE)
+      ? []
+      : settingsStorageEffects(before, after),
     appliedAt: new Date().toISOString(),
   }
 }
@@ -271,15 +291,9 @@ export async function undoSettingsChangesInTransaction(
 ): Promise<void> {
   if (receipt.kind !== 'settings' || receipt.version !== 1 || receipt.storageEffects.length === 0)
     throw new ValidationError('INVALID_SETTINGS_UNDO', 'This change cannot be undone.')
-  for (const change of receipt.changes)
-    await requireAreaPermission(
-      actor,
-      change.area,
-      tx,
-      change.area === 'branding' && change.path[0] === 'logoKey'
-        ? PERMISSIONS.SETTINGS_MANAGE
-        : AREAS[change.area].permission
-    )
+  // Undoing a change writes the same settings as making it, so it asks for
+  // the same permissions.
+  for (const change of receipt.changes) await requireChangePermissions(tx, actor, change)
   const [row] = await tx.select().from(settings).limit(1).for('update')
   if (!row) throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
   if (receipt.storageEffects.some((effect) => effect.column === 'name'))

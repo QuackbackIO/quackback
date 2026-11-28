@@ -427,6 +427,16 @@ export const MODULE_STATE_LEDGER: readonly LedgerEntry[] = [
       'outlives the result once the response is sent.',
   },
   {
+    file: 'apps/web/src/lib/server/domains/settings/settings.after-commit.ts',
+    name: 'pending',
+    category: 'workspace-scoped-key',
+    keyedBy: 'executor',
+    reason:
+      "Keyed by one settings write's transaction object, which exists only for the request that " +
+      'opened it, so a lookup can only find its own write. It is a WeakMap and the entry is removed ' +
+      'when run or dropped, so nothing outlives the transaction.',
+  },
+  {
     file: 'apps/web/src/lib/server/response-hooks.ts',
     name: 'bodyEndHooks',
     category: 'workspace-scoped-key',

@@ -10,6 +10,7 @@ import { z } from 'zod'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { officeHoursScheduleSchema } from '@/lib/shared/office-hours'
 import { settingsPatchSchemas, type SettingsArea } from '@/lib/shared/assistant/settings-proposals'
+import { languagesValueSchema } from '@/lib/shared/languages-settings'
 
 export {
   SETTINGS_AREAS,
@@ -72,6 +73,16 @@ export const SETTINGS_AREA_META: Record<SettingsArea, SettingsAreaMeta> = {
     permission: PERMISSIONS.CHANGELOG_MANAGE,
     href: '/admin/settings/changelog',
   },
+  languages: {
+    id: 'languages',
+    title: 'Languages',
+    description:
+      "The main language and what visitors see; the help center's extra languages, the words each shows on its pages, automatic translation and its glossary. A new main language that is an extra language swaps in: its translations become the main articles. Changing extra languages, page labels, automatic translation or the glossary also needs the help center permission.",
+    // The main language is on General; the help center fields also need
+    // the help center permission (settings-proposals.service).
+    permission: PERMISSIONS.SETTINGS_MANAGE,
+    href: '/admin/settings/general',
+  },
 }
 
 const themeVariables = z.record(z.string(), z.unknown())
@@ -99,6 +110,7 @@ export const settingsReadSchemas = {
     autoSubscribe: z.boolean(),
     emailsDisabled: z.boolean(),
   }),
+  languages: languagesValueSchema,
 } as const satisfies Record<SettingsArea, z.ZodType>
 
 /** The merge patch each area accepts. */
@@ -112,6 +124,7 @@ export const settingsAnyAreaPatchSchema = z.union([
   settingsPatchSchemas.modules,
   settingsPatchSchemas.office_hours,
   settingsPatchSchemas.changelog,
+  settingsPatchSchemas.languages,
 ])
 
 /** A field an operator or the config file holds, so no one may change it here. */
