@@ -177,6 +177,7 @@ describe('related articles in another language', () => {
       slug: a.slug,
       title: a.title,
       description: null,
+      locale: 'en',
       categorySlug: categoryId,
     }))
 
@@ -198,9 +199,10 @@ describe('related articles in another language', () => {
         slug: article.slug,
         title: article.title,
         description: null,
+        locale: 'en',
         categorySlug: 'c',
       },
     ]
-    expect(await localizeRelatedArticles(related, 'en')).toEqual([{ ...related[0], locale: 'en' }])
+    expect(await localizeRelatedArticles(related, 'en')).toEqual(related)
   })
 })

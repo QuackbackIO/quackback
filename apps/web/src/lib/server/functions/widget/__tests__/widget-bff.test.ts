@@ -76,20 +76,12 @@ const hoisted = vi.hoisted(() => {
     serializeCategory: vi.fn((c: unknown) => c),
     serializeArticle: vi.fn((a: unknown) => a),
   }
-  // Real behaviour: the requested locale, else the help center's default.
-  const withDefaultLocaleFallback = vi.fn(
-    async (locale: string, _fallback: string, load: (loc: string) => Promise<unknown>) => ({
-      value: await load(locale),
-      locale,
-    })
-  )
   return {
     requireWidgetAuth,
     getOptionalWidgetAuth,
     requireAuth,
     getOptionalAuth,
     run,
-    withDefaultLocaleFallback,
   }
 })
 
@@ -179,9 +171,6 @@ vi.mock('@/lib/server/domains/api/rate-limit', () => ({
   getClientIp: (headers: Headers) => headers.get('x-forwarded-for') ?? 'unknown',
 }))
 vi.mock('@/lib/shared/widget/article-ref', () => ({ canonicalArticleTypeId: () => null }))
-vi.mock('@/lib/shared/widget/article-locale', () => ({
-  withDefaultLocaleFallback: hoisted.withDefaultLocaleFallback,
-}))
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   getHelpCenterConfig: hoisted.run.getHelpCenterConfig,
 }))
@@ -557,12 +546,14 @@ describe('widget help reads pick a language the help center has', () => {
   })
 
   it('opens an article in the default language when the visitor language is not enabled', async () => {
-    await widgetResolvePublicArticleRefFn({ data: { ref: 'getting-started', locale: 'de' } })
-    expect(hoisted.withDefaultLocaleFallback).toHaveBeenCalledWith(
+    const article = await widgetResolvePublicArticleRefFn({
+      data: { ref: 'getting-started', locale: 'de' },
+    })
+    expect(hoisted.run.getPublicArticleBySlugForLocale).toHaveBeenCalledWith(
+      'getting-started',
       'en',
-      'en',
-      expect.any(Function),
-      expect.any(Function)
+      READER
     )
+    expect(article?.resolvedLocale).toBe('en')
   })
 })

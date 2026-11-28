@@ -333,6 +333,9 @@ describe('the real corpus', () => {
     // 0326 rebuilds kb_articles.search_vector only while its expression does
     // not yet read the row's locale, as 0288 does for translations, so a
     // second run changes nothing.
+    // 0327 adds kb_categories.locale and labels existing collections with the
+    // main language only while the column is absent, so a second run never
+    // relabels a collection that changed language since.
     const vouching = files.filter(
       (f) => assessReplaySafety(f, readFileSync(join(MIGRATIONS_DIR, f), 'utf8')).vouched.length > 0
     )
@@ -367,6 +370,7 @@ describe('the real corpus', () => {
       '0316_personal_key_reply_cutoff.sql',
       '0323_clear_legacy_header_settings.sql',
       '0326_kb_articles_locale.sql',
+      '0327_kb_categories_locale.sql',
     ])
   })
 

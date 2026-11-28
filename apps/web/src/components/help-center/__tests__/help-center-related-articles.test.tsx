@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 /**
- * A related article links to the language it was loaded in: the page's
- * language when it is translated there, else the main language page.
+ * A related article links to its page in the page's language, which exists
+ * whether or not it is translated there. One with no version in the page's
+ * language names the language its title is in.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
@@ -23,7 +24,7 @@ afterEach(cleanup)
 const base = { description: null, categorySlug: 'setup' }
 
 describe('HelpCenterRelatedArticles', () => {
-  it("links each article to the language it was loaded in, not the page's", () => {
+  it("links every article to the page's language, naming the language of an untranslated one", () => {
     render(
       <IntlProvider locale="fr">
         <HelpCenterRelatedArticles
@@ -45,8 +46,12 @@ describe('HelpCenterRelatedArticles', () => {
     expect(screen.getByRole('link', { name: /Guide du routeur/ }).getAttribute('href')).toBe(
       '/hc/fr/articles/1-guide'
     )
-    expect(screen.getByRole('link', { name: /Router advanced/ }).getAttribute('href')).toBe(
-      '/hc/en/articles/2-advanced'
+    const untranslated = screen.getByRole('link', { name: /Router advanced/ })
+    expect(untranslated.getAttribute('href')).toBe('/hc/fr/articles/2-advanced')
+    expect(untranslated.textContent).toContain('English')
+    expect(screen.getByText('Router advanced').getAttribute('lang')).toBe('en')
+    expect(screen.getByRole('link', { name: /Guide du routeur/ }).textContent).not.toContain(
+      'English'
     )
   })
 })

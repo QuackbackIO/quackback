@@ -24,7 +24,7 @@ const article = {
 
 function headFor(workspaceName: string) {
   return head({
-    loaderData: { article },
+    loaderData: { article, canonicalLocale: 'en' },
     params: { locale: 'en', idSlug: '150-mcp-reference' },
     matches: [
       {
@@ -63,7 +63,7 @@ describe('help center article head', () => {
 
   it('omits the canonical when the request has no base URL', () => {
     const { links } = head({
-      loaderData: { article },
+      loaderData: { article, canonicalLocale: 'en' },
       params: { locale: 'en', idSlug: '150-mcp-reference' },
       matches: [{ routeId: '/_portal', loaderData: { workspaceName: 'Acme' }, context: {} }],
     })
@@ -72,7 +72,7 @@ describe('help center article head', () => {
 
   it("canonicalises to the article URL on the help center's own host", () => {
     const { links } = head({
-      loaderData: { article },
+      loaderData: { article, canonicalLocale: 'en' },
       params: { locale: 'en', idSlug: '150-mcp-reference' },
       matches: [
         {
@@ -93,5 +93,22 @@ describe('help center article head', () => {
       rel: 'canonical',
       href: 'https://help.acme.com/hc/en/articles/150-mcp-reference',
     })
+  })
+
+  it('canonicalises a French page showing the English article to the English page', () => {
+    const { links } = head({
+      loaderData: { article, canonicalLocale: 'en' },
+      params: { locale: 'fr', idSlug: '150-mcp-reference' },
+      matches: [
+        {
+          routeId: '/_portal',
+          loaderData: { workspaceName: 'Acme' },
+          context: { baseUrl: 'https://feedback.example.com' },
+        },
+      ],
+    })
+    expect(links).toEqual([
+      { rel: 'canonical', href: 'https://feedback.example.com/hc/en/articles/150-mcp-reference' },
+    ])
   })
 })

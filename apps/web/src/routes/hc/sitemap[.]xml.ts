@@ -8,7 +8,7 @@ export const Route = createFileRoute('/hc/sitemap.xml')({
         const [
           { isFeatureEnabled, getHelpCenterConfig },
           { listPublicCategories, listPublicArticles },
-          { listPublicCategoriesForLocale, listPublicArticlesForCategoryLocale },
+          { listPublicCategoriesWithVersionIn, articlesWithVersionIn },
           { buildHelpCenterSitemapUrls, buildHelpCenterSitemapUrlsMultiLocale },
           { renderSitemap },
           { getSectionOrigins },
@@ -98,32 +98,27 @@ export const Route = createFileRoute('/hc/sitemap.xml')({
           // locale only includes categories/articles that are actually
           // translated there; the builder cross-links matching entities by id.
           const perLocale: LocaleSitemapEntry[] = []
+          const languages = { main: defaultLocale, additional: additionalLocales }
+          // An article is listed wherever its own page is canonical, even when
+          // its collection's page is canonical in another language. The
+          // articles load once; each language adds one translations query.
+          const { items: allArticles } = await listPublicArticles({ limit: 50000 })
           for (const locale of [defaultLocale, ...additionalLocales]) {
-            const categories = await listPublicCategoriesForLocale(locale)
-            const articlesByCategory = await Promise.all(
-              categories.map(async (cat) => ({
-                categorySlug: cat.slug,
-                articles: await listPublicArticlesForCategoryLocale(cat.id, locale),
-              }))
-            )
+            const [categories, articles] = await Promise.all([
+              listPublicCategoriesWithVersionIn(locale, languages),
+              articlesWithVersionIn(allArticles, locale, languages),
+            ])
             perLocale.push({
               locale,
               categories: categories.map((c) => ({ id: c.id, urlId: c.urlId, slug: c.slug })),
-              articles: articlesByCategory.flatMap(({ categorySlug, articles }) =>
-                articles.map((a) => ({
-                  id: a.id,
-                  urlId: a.urlId,
-                  slug: a.slug,
-                  // The locale-gated article list projects publishedAt, not
-                  // updatedAt (list-view summary shape) -- a reasonable
-                  // lastmod proxy given the alternative is omitting it.
-                  updatedAt:
-                    a.publishedAt instanceof Date
-                      ? a.publishedAt.toISOString()
-                      : new Date().toISOString(),
-                  category: { slug: categorySlug },
-                }))
-              ),
+              articles: articles.map((a) => ({
+                id: a.id,
+                urlId: a.urlId,
+                slug: a.slug,
+                updatedAt:
+                  a.updatedAt instanceof Date ? a.updatedAt.toISOString() : String(a.updatedAt),
+                category: { slug: a.category.slug },
+              })),
             })
           }
           allUrls = buildHelpCenterSitemapUrlsMultiLocale(helpUrl, defaultLocale, perLocale)

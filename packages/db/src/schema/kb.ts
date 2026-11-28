@@ -99,6 +99,12 @@ export const helpCenterCategories = pgTable(
     position: integer('position').default(0).notNull(),
     /** Public numeric id used in `/hc/{locale}/collections/{urlId}-{slug}`. */
     urlId: integer('url_id').generatedByDefaultAsIdentity().notNull(),
+    /**
+     * The language of the collection's own name and description: the main
+     * language, unless the main language changed and the collection had no
+     * version in the new one.
+     */
+    locale: text('locale').notNull().default('en'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -142,8 +148,9 @@ export const helpCenterArticles = pgTable(
     /** Public numeric id used in `/hc/{locale}/articles/{urlId}-{slug}`. */
     urlId: integer('url_id').generatedByDefaultAsIdentity().notNull(),
     /**
-     * The article's language: the workspace's main language. Search stems
-     * the article by it. Changing the main language relabels every article.
+     * The language of the article's own text: the main language, unless the
+     * main language changed and the article had no version in the new one.
+     * Search stems the article by it.
      */
     locale: text('locale').notNull().default('en'),
     searchVector: tsvector('search_vector').generatedAlwaysAs(

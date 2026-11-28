@@ -312,11 +312,14 @@ export async function createCategory(input: CreateCategoryInput): Promise<HelpCe
     })
   }
 
+  // A new collection is written in the main language.
+  const { getMainLanguage } = await import('@/lib/server/domains/settings/settings.service')
   const [category] = await db
     .insert(helpCenterCategories)
     .values({
       name,
       slug,
+      locale: await getMainLanguage(),
       description: input.description?.trim() || null,
       isPublic: input.isPublic ?? true,
       segmentIds: input.segmentIds ? await validateSegmentIds(input.segmentIds) : [],

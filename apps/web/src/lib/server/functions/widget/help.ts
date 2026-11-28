@@ -68,24 +68,18 @@ export const widgetResolvePublicArticleRefFn = createServerFn({ method: 'GET' })
     const { getPublicArticleByIdForLocale, getPublicArticleBySlugForLocale } =
       await import('@/lib/server/domains/help-center/help-center-locale.query')
     const { NotFoundError } = await import('@/lib/shared/errors')
-    const { withDefaultLocaleFallback } = await import('@/lib/shared/widget/article-locale')
     const viewer = await resolveHelpPublicReader(await getOptionalWidgetAuth())
     if (!viewer) return null
-    const { locale, defaultLocale } = await resolveHelpLocale(data.locale)
+    const { locale } = await resolveHelpLocale(data.locale)
     try {
       const kbId = canonicalArticleTypeId(data.ref)
-      const load = (loc: string) =>
-        kbId
-          ? getPublicArticleByIdForLocale(kbId, loc, viewer)
-          : getPublicArticleBySlugForLocale(data.ref, loc, viewer)
-      const { value: article, locale: resolvedLocale } = await withDefaultLocaleFallback(
-        locale,
-        defaultLocale,
-        load,
-        (err) => err instanceof NotFoundError
-      )
+      // An article with no version in the language reads in its own; the
+      // portal page in the visitor's language says so.
+      const article = kbId
+        ? await getPublicArticleByIdForLocale(kbId, locale, viewer)
+        : await getPublicArticleBySlugForLocale(data.ref, locale, viewer)
       const { helpfulCount: _h, notHelpfulCount: _n, ...publicArticle } = serializeArticle(article)
-      return { ...publicArticle, resolvedLocale }
+      return { ...publicArticle, resolvedLocale: locale }
     } catch (err) {
       if (err instanceof NotFoundError) return null
       throw err

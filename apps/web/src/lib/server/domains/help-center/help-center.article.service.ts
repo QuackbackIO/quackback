@@ -298,10 +298,9 @@ export async function createArticle(
   // under General rather than refusing the save.
   const chosen = input.categoryId?.trim() as KbCategoryId | undefined
   if (chosen) await assertLiveCategory(chosen)
-  const categoryId = chosen || (await ensureDefaultHelpCategory())
-
   const { getMainLanguage } = await import('@/lib/server/domains/settings/settings.service')
   const mainLanguage = await getMainLanguage()
+  const categoryId = chosen || (await ensureDefaultHelpCategory(db, mainLanguage))
   const [article] = await db
     .insert(helpCenterArticles)
     .values({
