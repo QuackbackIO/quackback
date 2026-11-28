@@ -87,6 +87,7 @@ import { importBrief, ImportSection, importSummary, useBrandImport } from './imp
 import { AskDock } from './ask-dock'
 import { siteColoursOf } from './brand-apply'
 import { track } from '@/lib/client/analytics'
+import { arrowStep } from '@/lib/client/arrow-step'
 import {
   pageOfPath,
   sectionForTarget,
@@ -972,7 +973,7 @@ const DevicePicker = memo(function DevicePicker({
   onDevice: (device: PreviewDevice) => void
 }) {
   const onDeviceKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0
+    const step = arrowStep(event)
     if (!step) return
     event.preventDefault()
     const index = DEVICES.findIndex((d) => d.value === device)

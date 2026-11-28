@@ -92,4 +92,65 @@ test.describe('admin mirrors right to left', () => {
       }
     }
   )
+
+  test(
+    'ADM-RTL-2 a switch keeps its thumb inside the track, on and off, in both directions',
+    { tag: '@core' },
+    async ({ browser, newTeammate }) => {
+      const mate = await newTeammate({ roleKey: 'admin' })
+      await supportDb()`UPDATE "user" SET preferred_language = 'ar'
+        WHERE id = ${toUuid(mate.userId as `user_${string}`)}`
+      const context = await browser.newContext({
+        storageState: mate.storageState,
+        viewport: { width: 1440, height: 900 },
+      })
+      /** Each switch's track and thumb edges, and whether it is on. */
+      const switches = (page: Page) =>
+        page.locator('[data-slot="switch"]').evaluateAll((nodes) =>
+          nodes.map((node) => {
+            const track = node.getBoundingClientRect()
+            const thumb = node.firstElementChild!.getBoundingClientRect()
+            return {
+              on: node.hasAttribute('data-checked'),
+              inside: thumb.left >= track.left - 0.5 && thumb.right <= track.right + 0.5,
+              atEnd:
+                getComputedStyle(node).direction === 'rtl'
+                  ? track.left + track.width / 2 > thumb.left + thumb.width / 2
+                  : track.left + track.width / 2 < thumb.left + thumb.width / 2,
+            }
+          })
+        )
+      try {
+        const page = await context.newPage()
+        // A page that is already right to left for an Arabic teammate.
+        await page.goto('/admin/settings/copilot')
+        await expect(page.locator('html')).toHaveAttribute('dir', 'rtl', { timeout: 20_000 })
+        await expect(page.locator('[data-slot="switch"]').first()).toBeVisible({ timeout: 20_000 })
+        // The thumb's move is animated; wait for it to settle.
+        await page.waitForTimeout(400)
+        await snap(page, 'rtl-switch-copilot')
+        const rtl = await switches(page)
+        expect(rtl.some(({ on }) => on)).toBe(true)
+        for (const result of rtl)
+          expect(result).toEqual({ ...result, inside: true, atEnd: result.on })
+
+        // A page still in English reads left to right, then mirrored.
+        await page.goto('/admin/settings/widget')
+        await expect(page.locator('html')).toHaveAttribute('dir', 'ltr', { timeout: 20_000 })
+        await expect(page.locator('[data-slot="switch"]').first()).toBeVisible({ timeout: 20_000 })
+        for (const dir of ['ltr', 'rtl'] as const) {
+          await setDirection(page, dir)
+          await page.waitForTimeout(400)
+          await snap(page, `${dir}-switch-widget`)
+          const results = await switches(page)
+          expect(results.some(({ on }) => on)).toBe(true)
+          for (const result of results) {
+            expect(result).toEqual({ ...result, inside: true, atEnd: result.on })
+          }
+        }
+      } finally {
+        await context.close()
+      }
+    }
+  )
 })

@@ -183,4 +183,44 @@ describe('the direction scan', () => {
       )
     ).toEqual(['<ChevronRightIcon> add rtl:-scale-x-100', '<ArrowLeftIcon> add rtl:-scale-x-100'])
   })
+
+  it('finds direction icons passed by reference, not imports, keys or key names', () => {
+    expect(
+      found(
+        `import { ArrowLeft, ChevronRightIcon } from 'lucide-react'
+         const keys = { ArrowLeft: -1, ArrowRight: 1 }
+         const a = <ToolbarButton icon={ArrowLeft} />
+         const b = { icon: ChevronRightIcon }`
+      )
+    ).toEqual([
+      'ArrowLeft passed by reference: pass a component that renders it with rtl:-scale-x-100',
+      'ChevronRightIcon passed by reference: pass a component that renders it with rtl:-scale-x-100',
+    ])
+  })
+
+  it('finds a chevron turned a quarter with no rtl: turn beside it', () => {
+    expect(
+      found(
+        `const a = <>
+          <ChevronDownIcon className={\`size-3 \${open ? '' : '-rotate-90'}\`} />
+          <ChevronDownIcon className={open ? '' : '-rotate-90 rtl:rotate-90'} />
+          <ChevronRightIcon className={cn('rtl:-scale-x-100', open && 'rotate-90 rtl:-rotate-90')} />
+          <ChevronDownIcon className={cn(open && 'rotate-180')} />
+        </>`
+      )
+    ).toEqual(['<ChevronDownIcon> add an rtl: turn the other way'])
+  })
+
+  it('finds a sideways move with no rtl: move in the same classes', () => {
+    expect(
+      found(
+        `const a = 'data-checked:translate-x-4 data-unchecked:translate-x-0'
+         const b = 'data-checked:translate-x-4 rtl:data-checked:-translate-x-4'
+         const c = 'left-1/2 -translate-x-1/2 translate-x-0 -translate-x-[50%]'`
+      )
+    ).toEqual([
+      'data-checked:translate-x-4 add an rtl: move the other way',
+      'left-1/2 use start-1/2',
+    ])
+  })
 })

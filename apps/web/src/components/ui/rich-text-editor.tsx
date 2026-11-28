@@ -2064,6 +2064,15 @@ function handleMediaPaste(
 // Toolbar Components
 // ============================================================================
 
+/** Column arrows point at the side the column goes on, so they turn round in a right-to-left table. */
+function ColumnBeforeIcon({ className }: { className?: string }) {
+  return <ArrowLeft className={cn(className, 'rtl:-scale-x-100')} />
+}
+
+function ColumnAfterIcon({ className }: { className?: string }) {
+  return <ArrowRight className={cn(className, 'rtl:-scale-x-100')} />
+}
+
 interface ToolbarButtonProps {
   /** Drawn at size-4. A component rather than an element, so a memoized
    * button can compare it across renders. */
@@ -2385,14 +2394,14 @@ function TableToolbar({ editor, disabled }: TableToolbarProps) {
       <ToolbarDivider />
       {/* Add column left */}
       <ToolbarButton
-        icon={ArrowLeft}
+        icon={ColumnBeforeIcon}
         onClick={() => editor.chain().focus().addColumnBefore().run()}
         disabled={disabled}
         title="Add column left"
       />
       {/* Add column right */}
       <ToolbarButton
-        icon={ArrowRight}
+        icon={ColumnAfterIcon}
         onClick={() => editor.chain().focus().addColumnAfter().run()}
         disabled={disabled}
         title="Add column right"

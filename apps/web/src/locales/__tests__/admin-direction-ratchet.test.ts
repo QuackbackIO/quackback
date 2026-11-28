@@ -1,6 +1,6 @@
 /**
  * Guard: admin keeps mirroring in a right-to-left language. Each admin file
- * may hold no more left/right classes and unmirrored direction icons than its
+ * may hold no more left/right classes, unmirrored icons and one-way moves than its
  * baseline (admin-direction-baseline.json); a new file holds none. The
  * baseline keeps the sides that are physical on purpose. See
  * docs/translating.md.
@@ -14,7 +14,7 @@ const ratchet = RATCHETS.find(({ name }) => name === 'direction')!
 const files = adminSourceFiles()
 
 describe('admin direction ratchet', () => {
-  it('no admin file gains a left/right class or an unmirrored direction icon', () => {
+  it('no admin file gains a left/right class, an unmirrored icon or a one-way move', () => {
     const report = ratchetReport(ratchet, scanFiles(ratchet.scan, files))
     expect(report.regressions, report.regressions).toBe('')
   })

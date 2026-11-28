@@ -29,7 +29,7 @@ export const RATCHETS: Ratchet[] = [
     name: 'direction',
     scan: scanDirection,
     baselinePath: join(import.meta.dirname, 'admin-direction-baseline.json'),
-    problem: 'left/right classes or unmirrored direction icons',
-    fix: 'Use the start/end class shown, and add rtl:-scale-x-100 to icons that point back or next. Keep left/right only where the side is physical.',
+    problem: 'left/right classes, unmirrored icons or one-way moves',
+    fix: 'Use the start/end class shown, add rtl:-scale-x-100 to icons that point back or next, and give a quarter turn or a sideways move its rtl: opposite. Keep left/right only where the side is physical.',
   },
 ]

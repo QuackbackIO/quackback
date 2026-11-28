@@ -141,7 +141,18 @@ direction:
 Icons that point back or next (`ChevronLeftIcon`, `ChevronRightIcon`,
 `ArrowLeftIcon`, `ArrowRightIcon`) turn round with `rtl:-scale-x-100`. A
 chevron that turns down when open with `rotate-90` also needs
-`rtl:-rotate-90`, because the mirror flips the turn.
+`rtl:-rotate-90`, because the mirror flips the turn. A down chevron turned
+sideways with `-rotate-90` (pointing next while closed) needs `rtl:rotate-90`
+to point the other way. An icon passed by reference (`icon={ArrowLeft}`) goes
+through a small component that renders it with the mirror.
+
+A sideways move (`translate-x-4`, such as a switch's thumb) needs the opposite
+move beside it, `rtl:-translate-x-4`, in the same class string.
+
+Arrow keys follow what the reader sees: in a row of choices, the Left key
+moves to the choice on the left, which is the next one in right to left. Use
+`arrowStep` from `lib/client/arrow-step.ts`. A colour area or other control
+drawn left to right in both directions keeps the physical keys.
 
 Keep a physical side only where the side really is physical: a box centred
 with `left-1/2 -translate-x-1/2`, a sheet that slides in from the side its
@@ -164,7 +175,8 @@ TMPDIR=~/.cache/vt-tmp npx vitest run src/locales src/components/shared/__tests_
 - `locale-vocabulary.test.ts`: no em dashes, one word per product.
 - `admin-english-ratchet.test.ts`: admin code does not gain English.
 - `admin-direction-ratchet.test.ts`: admin code does not gain left/right
-  classes or direction icons that do not turn round.
+  classes, direction icons that do not turn round, or sideways moves that go
+  one way.
 
 ### The English ratchet
 
@@ -195,7 +207,7 @@ The direction ratchet works the same way with `admin-direction-baseline.json`
 and names the logical class to use:
 
 ```
-components/admin/settings/team/member-row.tsx has 2 left/right classes or unmirrored direction icons (baseline 0):
+components/admin/settings/team/member-row.tsx has 2 left/right classes, unmirrored icons or one-way moves (baseline 0):
   line 23 ml-3 use ms-3
   line 40 text-left use text-start
 ```

@@ -51,4 +51,18 @@ describe('SegmentedControl', () => {
     await userEvent.keyboard('{ArrowLeft}')
     expect(onChange).toHaveBeenLastCalledWith('ask')
   })
+
+  it('moves to the choice on the left with the Left key in a right-to-left page', async () => {
+    const onChange = vi.fn()
+    render(
+      <div dir="rtl" style={{ direction: 'rtl' }}>
+        <SegmentedControl label="Set attribute" options={OPTIONS} value="ask" onChange={onChange} />
+      </div>
+    )
+    screen.getByRole('radio', { name: 'Ask' }).focus()
+    await userEvent.keyboard('{ArrowLeft}')
+    expect(onChange).toHaveBeenLastCalledWith('never')
+    await userEvent.keyboard('{ArrowRight}{ArrowRight}')
+    expect(onChange).toHaveBeenLastCalledWith('allow')
+  })
 })

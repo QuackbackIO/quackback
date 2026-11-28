@@ -6,7 +6,13 @@
  *   (`ms-2`, `pe-3`, `start-0`, `text-end`, `rounded-s-md`, `border-e`)
  *   follows the reading direction;
  * - icons that point back or next (`ChevronRightIcon`, `ArrowLeftIcon`)
- *   without `rtl:-scale-x-100`, which keeps them pointing the old way.
+ *   without `rtl:-scale-x-100`, which keeps them pointing the old way, and
+ *   such an icon passed by reference (`icon={ArrowLeft}`), which the scan
+ *   cannot see mirrored: pass a component that renders it with the mirror;
+ * - a chevron or arrow turned a quarter (`-rotate-90`) without an `rtl:`
+ *   turn beside it, which points the same physical way in both directions;
+ * - a sideways move (`translate-x-4`) without an `rtl:` move in the same
+ *   class string, which goes the wrong way once the start is on the right.
  *
  * A side that is physical on purpose (a centred popover's `left-1/2`, a
  * sheet that slides in from the left) stays in the baseline.
@@ -105,6 +111,15 @@ export const MIRROR = 'rtl:-scale-x-100'
 /** Classes that turn an icon round in a right-to-left page: the mirror, or a half turn. */
 const TURNS_IN_RTL = new Set([MIRROR, 'rtl:rotate-180'])
 
+/** Chevrons and arrows of any direction: a quarter turn makes them point sideways. */
+const TURNABLE_ICON = /^(Chevron|Arrow)[A-Za-z]*$/
+
+/** A quarter turn without variants. */
+const QUARTER_TURN = /^-?rotate-90$/
+
+/** A sideways move that is not none (`0`) or a centring half (`1/2`). */
+const SIDEWAYS = /^-?translate-x-(?!0$|1\/2$|\[-?50%\]$)/
+
 /** The classes of a string or template text, with the offset each starts at. */
 export function classTokens(text: string): { token: string; at: number }[] {
   return [...text.matchAll(/\S+/g)].map((match) => ({ token: match[0], at: match.index! }))
@@ -128,36 +143,84 @@ function textsIn(node: Node | null | undefined): string[] {
   return texts
 }
 
-function mirrored(element: Node): boolean {
+/** Every class in an element's className. */
+function classesOf(element: Node): string[] {
   const className = (element.attributes as Node[]).find(
     (attribute) =>
       attribute.type === 'JSXAttribute' && jsxName(attribute.name as Node) === 'className'
   )
-  return textsIn(className?.value as Node).some((text) =>
-    classTokens(text).some(({ token }) => TURNS_IN_RTL.has(token))
+  return textsIn(className?.value as Node).flatMap((text) =>
+    classTokens(text).map(({ token }) => token)
   )
+}
+
+function mirrored(classes: string[]): boolean {
+  return classes.some((token) => TURNS_IN_RTL.has(token))
+}
+
+/** A quarter turn with no `rtl:` turn beside it. */
+function turnedOneWay(classes: string[]): boolean {
+  const turned = classes.some((token) => QUARTER_TURN.test(splitClass(token).utility))
+  const turnsBack = classes.some((token) => /(^|:)rtl:(.*:)?-?rotate-/.test(token))
+  return turned && !turnsBack
+}
+
+/** Sideways moves in one class string that have no `rtl:` move beside them. */
+function oneWayMoves(text: string): string[] {
+  const tokens = classTokens(text).map(({ token }) => token)
+  if (tokens.some((token) => /(^|:)rtl:(.*:)?-?translate-x-/.test(token))) return []
+  return tokens.filter((token) => {
+    const { variants, utility } = splitClass(token)
+    return !variants.includes('ltr:') && SIDEWAYS.test(utility.replace(/^!|!$/g, ''))
+  })
+}
+
+/** Whether an identifier is a value, not an import, a key or a member name. */
+function isValue(node: Node, parent: Node | null): boolean {
+  if (!parent) return true
+  if (parent.type.startsWith('Import') || parent.type.startsWith('Export')) return false
+  if ((parent.type === 'ObjectProperty' || parent.type === 'ObjectMethod') && parent.key === node) {
+    return !!parent.computed
+  }
+  if (parent.type === 'MemberExpression' && parent.property === node) return !!parent.computed
+  return !parent.type.startsWith('TS')
 }
 
 export function scanDirection(source: string, file: string): Finding[] {
   const program = parseSource(source, file)
   if (!program) return []
   const findings: Finding[] = []
-  walk(program, (node) => {
+  walk(program, (node, parent) => {
+    const line = node.loc?.start.line ?? 0
     if (node.type === 'StringLiteral' || node.type === 'TemplateElement') {
       const text =
         node.type === 'StringLiteral' ? (node.value as string) : (node.value as { raw: string }).raw
       for (const { token } of classTokens(text)) {
         const logical = logicalClass(token)
-        if (logical) {
-          findings.push({ line: node.loc?.start.line ?? 0, text: `${token} use ${logical}` })
-        }
+        if (logical) findings.push({ line, text: `${token} use ${logical}` })
+      }
+      for (const token of oneWayMoves(text)) {
+        findings.push({ line, text: `${token} add an rtl: move the other way` })
+      }
+      return
+    }
+    if (node.type === 'Identifier' && DIRECTION_ICON.test(node.name as string)) {
+      if (isValue(node, parent)) {
+        findings.push({
+          line,
+          text: `${node.name as string} passed by reference: pass a component that renders it with ${MIRROR}`,
+        })
       }
       return
     }
     if (node.type === 'JSXOpeningElement') {
       const name = jsxName(node.name as Node)
-      if (DIRECTION_ICON.test(name) && !mirrored(node)) {
-        findings.push({ line: node.loc?.start.line ?? 0, text: `<${name}> add ${MIRROR}` })
+      const classes = classesOf(node)
+      if (DIRECTION_ICON.test(name) && !mirrored(classes)) {
+        findings.push({ line, text: `<${name}> add ${MIRROR}` })
+      }
+      if (TURNABLE_ICON.test(name) && turnedOneWay(classes)) {
+        findings.push({ line, text: `<${name}> add an rtl: turn the other way` })
       }
     }
   })

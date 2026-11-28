@@ -1,5 +1,6 @@
 import { useRef, type KeyboardEvent } from 'react'
 import { cn } from '@/lib/shared/utils'
+import { arrowStep } from '@/lib/client/arrow-step'
 
 interface SegmentedControlProps<T extends string> {
   /** Accessible name of the group. */
@@ -24,12 +25,7 @@ export function SegmentedControl<T extends string>({
   const group = useRef<HTMLDivElement>(null)
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    const step =
-      event.key === 'ArrowRight' || event.key === 'ArrowDown'
-        ? 1
-        : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
-          ? -1
-          : 0
+    const step = arrowStep(event, { vertical: true })
     if (step === 0) return
     event.preventDefault()
     const buttons = Array.from(
