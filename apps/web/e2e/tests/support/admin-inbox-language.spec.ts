@@ -97,12 +97,18 @@ async function galleryShots(page: Page, words: Record<string, string>, language:
     const target = page.getByRole(role, { name, exact: true }).first()
     if (await target.isVisible().catch(() => false)) await target.click().catch(() => undefined)
   }
+  // Wide enough for the details panel beside the thread.
+  await page.setViewportSize({ width: 1920, height: 1000 })
   await openInbox(page, words)
   await snap(page, `inbox-${language}-details`)
   await tryClick('tab', words['admin.inbox.inboxDetailPanel.copilot'])
   await page.waitForTimeout(500)
   await snap(page, `inbox-${language}-copilot`)
-  await tryClick('button', words['admin.inbox.labels.composer.reply'])
+  await page
+    .getByText(words['admin.inbox.labels.composer.reply'], { exact: true })
+    .last()
+    .click()
+    .catch(() => undefined)
   await page.waitForTimeout(300)
   await snap(page, `inbox-${language}-composer-menu`)
   await page.keyboard.press('Escape')
