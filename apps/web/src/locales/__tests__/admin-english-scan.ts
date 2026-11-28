@@ -30,19 +30,32 @@ export const READ_PROPS = new Set([
 /** Calls whose first argument a person reads: toasts and the browser's own dialogs. */
 const READ_CALLS = /^(toast(\.(success|error|info|warning|message|loading))?|alert|confirm)$/
 
-/** Whether a text reads as words, not a key, a path, a class or a URL. */
-export function hasWords(text: string): boolean {
+/** A message key or a path: lowercase parts joined by dots, colons or slashes. */
+const KEY_OR_PATH = /^[a-z0-9_-]+([.:/#][a-z0-9_-]+)+$/
+
+/**
+ * Whether a text reads as words, not a key, a path, a class or a URL. Text
+ * between tags and in a read prop is shown as it is, so a single lowercase
+ * word there counts (`loose`); in other places a lone lowercase token is
+ * usually a value.
+ */
+export function hasWords(text: string, loose = false): boolean {
   const trimmed = text.trim()
   if (!/[A-Za-z]{2,}/.test(trimmed)) return false
-  if (/^[a-z0-9_\-./:#@{}$]+$/.test(trimmed)) return false
+  if (loose ? KEY_OR_PATH.test(trimmed) : /^[a-z0-9_\-./:#@{}$]+$/.test(trimmed)) return false
   return !/^(https?:|\/|#|var\(|[a-z-]+:)/.test(trimmed)
 }
+
+/** Where a value goes into a template's text. */
+const VALUE = '{…}'
 
 function literal(node: Node | null | undefined): string | null {
   if (!node) return null
   if (node.type === 'StringLiteral') return node.value as string
-  if (node.type === 'TemplateLiteral' && (node.expressions as Node[]).length === 0) {
-    return ((node.quasis as Node[])[0]!.value as { cooked: string }).cooked
+  if (node.type === 'TemplateLiteral') {
+    return (node.quasis as Node[])
+      .map((quasi) => (quasi.value as { cooked: string }).cooked)
+      .join(VALUE)
   }
   if (node.type === 'JSXExpressionContainer') return literal(node.expression as Node)
   return null
@@ -84,16 +97,21 @@ export function scanEnglish(source: string, file: string): Finding[] {
   const program = parseSource(source, file)
   if (!program) return []
   const findings: Finding[] = []
-  const add = (node: Node, text: string, show: (text: string) => string = (t) => `"${t}"`) => {
+  const add = (
+    node: Node,
+    text: string,
+    show: (text: string) => string = (t) => `"${t}"`,
+    loose = false
+  ) => {
     const collapsed = text.replace(/\s+/g, ' ').trim()
-    if (!hasWords(collapsed)) return
+    if (!hasWords(collapsed.replaceAll(VALUE, ' ').trim(), loose)) return
     findings.push({ line: node.loc?.start.line ?? 0, text: show(collapsed) })
   }
 
   walk(program, (node) => {
     switch (node.type) {
       case 'JSXText':
-        add(node, node.value as string)
+        add(node, node.value as string, undefined, true)
         return
       case 'JSXOpeningElement': {
         // A <FormattedMessage>'s attributes are its catalog entry.
@@ -104,7 +122,7 @@ export function scanEnglish(source: string, file: string): Finding[] {
         const name = jsxName(node.name as Node)
         if (!READ_PROPS.has(name)) return
         const text = literal(node.value as Node)
-        if (text !== null) add(node, text, (t) => `${name}="${t}"`)
+        if (text !== null) add(node, text, (t) => `${name}="${t}"`, true)
         return
       }
       case 'CallExpression': {

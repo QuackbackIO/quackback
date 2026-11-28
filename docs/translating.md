@@ -141,8 +141,11 @@ TMPDIR=~/.cache/vt-tmp npx vitest run src/locales src/components/shared/__tests_
 `admin-english-ratchet.test.ts` reads the admin source files with a TypeScript
 parser and counts the English in code in each one: text between tags; the
 `label`, `placeholder`, `title`, `description`, `aria-label` and similar
-props; the same fields on plain objects; and toast messages. It compares each
-count with `admin-english-baseline.json` beside the test.
+props; the same fields on plain objects; and toast messages. Text between tags
+and in those props counts even when it is one lowercase word (`{n} members`),
+and a message built with values (``toast.error(`Could not save ${name}`)``)
+counts too. It compares each count with `admin-english-baseline.json` beside
+the test.
 
 - A count may go down. It may never go up.
 - A file the baseline does not list must have none, so a new file is written
