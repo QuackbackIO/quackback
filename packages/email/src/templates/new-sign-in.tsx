@@ -1,6 +1,8 @@
 import { Heading, Hr, Link, Section, Text } from '@react-email/components'
 import { EmailLayout, TransactionalFooter } from './email-layout'
 import { typography, utils } from './shared-styles'
+import { ENGLISH_EMAIL, type EmailLocale } from '../i18n'
+import { SECURITY_EMAIL_MESSAGES as M } from './recovery-code-used'
 
 interface NewSignInEmailProps {
   workspaceName?: string
@@ -12,6 +14,7 @@ interface NewSignInEmailProps {
   /** When true, skip the password CTA — the profile page hides PasswordForm. */
   ssoEnforced?: boolean
   logoUrl?: string
+  i18n?: EmailLocale
 }
 
 /**
@@ -30,33 +33,33 @@ export function NewSignInEmail({
   settingsUrl,
   ssoEnforced,
   logoUrl,
+  i18n = ENGLISH_EMAIL,
 }: NewSignInEmailProps) {
+  const { t } = i18n
   return (
-    <EmailLayout preview="A new sign-in was detected on your account" logoUrl={logoUrl}>
-      <Heading style={typography.h1}>New sign-in to your account</Heading>
+    <EmailLayout preview={t(M.signInPreview)} logoUrl={logoUrl} i18n={i18n}>
+      <Heading style={typography.h1}>{t(M.signInHeading)}</Heading>
       <Text style={typography.text}>
-        {workspaceName
-          ? `Someone just signed in to your ${workspaceName} account on a device we haven't seen before.`
-          : 'Someone just signed in to your account on a device we haven’t seen before.'}
+        {workspaceName ? t(M.signInBodyNamed, { workspace: workspaceName }) : t(M.signInBody)}
       </Text>
 
       <Section style={utils.codeBox}>
         <Text style={typography.text}>
-          <strong>When:</strong> {occurredAt}
+          <strong>{t(M.when)}</strong> {occurredAt}
         </Text>
         {ipAddress ? (
           <Text style={typography.text}>
-            <strong>IP:</strong> {ipAddress}
+            <strong>{t(M.ip)}</strong> {ipAddress}
           </Text>
         ) : null}
         {location ? (
           <Text style={typography.text}>
-            <strong>Location:</strong> {location}
+            <strong>{t(M.location)}</strong> {location}
           </Text>
         ) : null}
         {userAgent ? (
           <Text style={typography.text}>
-            <strong>Device:</strong> {userAgent}
+            <strong>{t(M.device)}</strong> {userAgent}
           </Text>
         ) : null}
       </Section>
@@ -65,28 +68,25 @@ export function NewSignInEmail({
 
       <Text style={typography.text}>
         {ssoEnforced ? (
-          'If that was you, no action needed. If it wasn’t, change your password at your identity provider and ask a workspace admin to sign out other sessions.'
+          t(M.signInSso)
         ) : (
           <>
-            If that was you, no action needed. If it wasn’t,{' '}
+            {t(M.signInPasswordIntro)}{' '}
             {settingsUrl ? (
               <>
                 <Link href={settingsUrl} style={utils.link}>
-                  set or change your password
+                  {t(M.signInPasswordLink)}
                 </Link>{' '}
-                from your profile settings. This signs out other sessions.
+                {t(M.signInPasswordRest)}
               </>
             ) : (
-              'set or change your password from your profile settings. This signs out other sessions.'
+              `${t(M.signInPasswordLink)} ${t(M.signInPasswordRest)}`
             )}
           </>
         )}
       </Text>
 
-      <TransactionalFooter>
-        You&apos;re receiving this because a new sign-in was detected on your account. These alerts
-        are required and can&apos;t be disabled.
-      </TransactionalFooter>
+      <TransactionalFooter>{t(M.signInFooter)}</TransactionalFooter>
     </EmailLayout>
   )
 }

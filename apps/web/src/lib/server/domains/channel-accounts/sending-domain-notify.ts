@@ -11,7 +11,7 @@
  * caller can try again.
  */
 import type { PrincipalId, UserId } from '@quackback/ids'
-import type { SendingDomainAttentionProblem } from '@quackback/email'
+import type { EmailLocale, SendingDomainAttentionProblem } from '@quackback/email'
 import type { AccountEmail } from '@quackback/email/recipient'
 import {
   db,
@@ -174,9 +174,12 @@ export function ownershipProblem(domain: EmailSendingDomain): SendingDomainAtten
   }
 }
 
-/** A date as the warning gives it, in UTC so every reader sees the same day. */
-export function formatDeadline(at: Date): string {
-  return new Intl.DateTimeFormat('en', { dateStyle: 'long', timeZone: 'UTC' }).format(at)
+/**
+ * A date as the warning gives it, in the reader's language (English for the
+ * bell) and in UTC so every reader sees the same day.
+ */
+export function formatDeadline(at: Date, lang = 'en'): string {
+  return new Intl.DateTimeFormat(lang, { dateStyle: 'long', timeZone: 'UTC' }).format(at)
 }
 
 /**
@@ -202,7 +205,7 @@ export async function notifySendingDomainOwnershipMissing(
       body: `${sendingDomainProblem(domain.domain, record)} ${sendingDomainDeadline(domain.domain, by)}`,
       metadata: { sendingDomainId: domain.id, domain: domain.domain, audience: 'admin' },
     })
-    return await emailManagers(managers, domain, record, by)
+    return await emailManagers(managers, domain, record, deadline)
   } catch (err) {
     log.warn(
       { err, sending_domain_id: domain.id },
@@ -217,6 +220,8 @@ export interface ManagerEmailContext {
   /** The app's base URL without a trailing slash; empty when none is set. */
   base: string
   workspaceName: string | undefined
+  /** The manager's language, which their email is written in. */
+  i18n: EmailLocale
 }
 
 /**
@@ -237,7 +242,8 @@ export async function emailEachManager(
   const { getWorkspaceSettings } = await import('@/lib/server/domains/settings/settings.service')
   const { getBaseUrl } = await import('@/lib/server/config')
   const workspace = await getWorkspaceSettings()
-  const context: ManagerEmailContext = {
+  const { recipientEmailLocale } = await import('@/lib/server/email/email-locale')
+  const shared = {
     base: getBaseUrl().replace(/\/$/, ''),
     workspaceName: workspace?.settings?.name,
   }
@@ -251,7 +257,8 @@ export async function emailEachManager(
     if (!to) continue
     due += 1
     try {
-      await send(to, context)
+      const i18n = await recipientEmailLocale({ principalId: manager.principalId })
+      await send(to, { ...shared, i18n })
       sent += 1
     } catch (err) {
       log.warn({ err, ...failure.logContext, principal_id: manager.principalId }, failure.message)
@@ -265,20 +272,21 @@ async function emailManagers(
   managers: Manager[],
   domain: EmailSendingDomain,
   record: SendingDomainAttentionProblem,
-  deadline?: string
+  deadline?: Date
 ): Promise<boolean> {
   const { sendSendingDomainAttentionEmail } = await import('@quackback/email')
   return emailEachManager(
     managers,
     'sending_domain_needs_attention',
-    (to, { base, workspaceName }) =>
+    (to, { base, workspaceName, i18n }) =>
       sendSendingDomainAttentionEmail({
         to,
         domain: domain.domain,
         record,
-        deadline,
+        deadline: deadline ? formatDeadline(deadline, i18n.lang) : undefined,
         settingsUrl: base ? `${base}/admin/settings/email` : null,
         workspaceName,
+        i18n,
       }),
     {
       logContext: { sending_domain_id: domain.id },

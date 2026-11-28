@@ -14,7 +14,11 @@
  * after; a failed recipient gives its claim back so the next hourly slot sends
  * only to those still missing, and a claim left by a crash lapses.
  */
-import type { PlanLimitsEmailKind as EmailKind, PlanLimitsEmailRow } from '@quackback/email'
+import type {
+  PlanLimitsEmailFeatureKey,
+  PlanLimitsEmailKind as EmailKind,
+  PlanLimitsEmailRow,
+} from '@quackback/email'
 import type { AccountEmail } from '@quackback/email/recipient'
 import { logger } from '@/lib/server/logger'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -22,11 +26,9 @@ import type { StoredPlanLimitsState } from '@/lib/shared/db-types'
 import { PLAN_LIMITS_PATH } from '@/lib/shared/billing/plan-limits-path'
 import { updatePlanLimitsState } from '@/lib/server/domains/settings/settings.plan-limits'
 import { PLAN_CATALOGUE } from '@/lib/server/domains/settings/cloud/cloud.types'
-import { PLAN_FEATURE_LINKS } from './plan-limits.features'
 import {
   parsePlanLimitsState,
   planLimitsDeadlineDay,
-  type PlanLimitIssueKey,
   type PlanLimitsState,
   type PlanLimitsView,
 } from './plan-limits.rules'
@@ -36,47 +38,20 @@ const log = logger.child({ component: 'plan-limits-emails' })
 
 const REMINDER_LEAD_MS = 2 * 24 * 60 * 60 * 1000
 
-/** "1 status component is", "3 status components are": a count, its noun and the verb. */
-function plural(n: number, noun: string): string {
-  return n === 1 ? `1 ${noun} is` : `${n} ${noun}s are`
-}
-
-/** How each cap reads in the email: its name and what happens to the excess. */
-const ISSUE_COPY: Record<PlanLimitIssueKey, { label: string; effect: (n: number) => string }> = {
-  maxBoards: {
-    label: 'Boards',
-    effect: (n) => `${n} ${n === 1 ? 'board becomes' : 'boards become'} read-only`,
-  },
-  maxTeamSeats: {
-    label: 'Team seats',
-    effect: (n) =>
-      `${n} ${n === 1 ? 'teammate loses' : 'teammates lose'} admin access until a seat frees up`,
-  },
-  maxStatusComponents: {
-    label: 'Status components',
-    effect: (n) => `${plural(n, 'status component')} hidden from your status page`,
-  },
-  maxCustomRoles: { label: 'Custom roles', effect: (n) => `${plural(n, 'custom role')} locked` },
-  maxSendingDomains: {
-    label: 'Sending domains',
-    effect: (n) => `${plural(n, 'sending domain')} paused`,
-  },
-  maxHelpCenterLocales: {
-    label: 'Help center languages',
-    effect: (n) => `${plural(n, 'help center language')} locked`,
-  },
-}
-
 /**
- * A date as it reads inline ("Nov 23") and in a heading ("Mon, Nov 23"), in
- * UTC so every reader sees the same day. The year appears only when it
+ * A date as it reads inline ("Nov 23") and in a heading ("Mon, Nov 23") in the
+ * reader's language, in UTC so every reader sees the same day. The year appears only when it
  * differs from the current one. The emails name the last full day to fix
  * (`deadlineDay`), never the instant the grace ends.
  */
-export function deadlineText(at: Date, now: Date): { deadline: string; deadlineHeading: string } {
+export function deadlineText(
+  at: Date,
+  now: Date,
+  lang = 'en'
+): { deadline: string; deadlineHeading: string } {
   const year = at.getUTCFullYear() === now.getUTCFullYear() ? {} : { year: 'numeric' as const }
   const format = (extra: Intl.DateTimeFormatOptions) =>
-    new Intl.DateTimeFormat('en', {
+    new Intl.DateTimeFormat(lang, {
       month: 'short',
       day: 'numeric',
       timeZone: 'UTC',
@@ -95,25 +70,28 @@ export function dueEmailKind(view: PlanLimitsView, now: Date): PlanLimitsEmailKi
   return now.getTime() >= remindAt ? 'reminder' : 'start'
 }
 
-/** Rows for the caps over: what is used and what happens to the excess. */
+/** Rows for the caps over: what is used and the cap. The email words each one. */
 export function emailRows(view: PlanLimitsView): PlanLimitsEmailRow[] {
-  return view.issues.map((issue) => {
-    const copy = ISSUE_COPY[issue.key]
-    const excess = Math.max(issue.used - issue.cap, 1)
-    return {
-      label: copy.label,
-      used: issue.used,
-      cap: issue.cap,
-      effect: copy.effect(excess),
-    }
-  })
+  return view.issues.map((issue) => ({ key: issue.key, used: issue.used, cap: issue.cap }))
 }
 
-/** Names of the paid features that pause. */
-export function pausingFeatureLabels(view: PlanLimitsView): string[] {
+/** The paid features that pause, as the email names them. */
+export function pausingFeatureKeys(view: PlanLimitsView): PlanLimitsEmailFeatureKey[] {
   return view.featureIssues
-    .map((issue) => PLAN_FEATURE_LINKS[issue.key]?.label)
-    .filter((label): label is string => label !== undefined)
+    .map((issue) => issue.key)
+    .filter((key): key is PlanLimitsEmailFeatureKey => key in EMAIL_FEATURES)
+}
+
+/** The paid features the email has words for. */
+const EMAIL_FEATURES: Record<PlanLimitsEmailFeatureKey, true> = {
+  customDomain: true,
+  sso: true,
+  webhooks: true,
+  workflows: true,
+  integrations: true,
+  customCss: true,
+  aiAssistant: true,
+  aiArticleTranslation: true,
 }
 
 /** An unfinished claim older than this is treated as lost (a crash mid-send) and taken again. */
@@ -243,22 +221,29 @@ export async function sendPlanLimitsEmails(
     workspaceName: workspace?.settings?.name,
     planName: view.plan ? PLAN_CATALOGUE[view.plan].name : null,
     fromPlanName: view.fromPlan ? PLAN_CATALOGUE[view.fromPlan].name : null,
-    ...deadlineText(
-      new Date(`${view.deadlineDay ?? planLimitsDeadlineDay(view.graceEndsAt)}T12:00:00.000Z`),
-      now
-    ),
     rows: emailRows(view),
-    pausingFeatures: pausingFeatureLabels(view),
+    pausingFeatures: pausingFeatureKeys(view),
     limitsUrl: base ? `${base}${PLAN_LIMITS_PATH}` : null,
     planUrl: base ? `${base}/admin/settings/billing` : null,
   }
+  const deadlineAt = new Date(
+    `${view.deadlineDay ?? planLimitsDeadlineDay(view.graceEndsAt)}T12:00:00.000Z`
+  )
 
+  const { recipientEmailLocale } = await import('@/lib/server/email/email-locale')
   const sent: string[] = []
   const failed: string[] = []
   for (const { principalId, to } of recipients) {
     if (!held.has(principalId)) continue
     try {
-      await sendPlanLimitsEmail({ to, ...props })
+      // Each billing manager reads it in their own language.
+      const i18n = await recipientEmailLocale({ principalId })
+      await sendPlanLimitsEmail({
+        to,
+        ...props,
+        ...deadlineText(deadlineAt, now, i18n.lang),
+        i18n,
+      })
       sent.push(principalId)
     } catch (err) {
       failed.push(principalId)

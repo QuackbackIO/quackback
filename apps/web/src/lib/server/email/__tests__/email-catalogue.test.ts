@@ -9,16 +9,21 @@ import { join } from 'node:path'
 import { createIntl } from 'react-intl'
 import { emailMessages, formatEnglish } from '@quackback/email'
 import { SUPPORTED_LOCALES } from '@/lib/shared/i18n'
+import { icuArgumentNames } from '@/locales/__tests__/icu-arguments'
 
 const LOCALES_DIR = join(__dirname, '../../../../locales')
 const catalogue = (locale: string): Record<string, string> =>
   JSON.parse(readFileSync(join(LOCALES_DIR, `${locale}.json`), 'utf8'))
 
 const messages = [...emailMessages()]
-const placeholders = (text: string) =>
-  [...new Set([...text.matchAll(/\{(\w+)/g)].map((m) => m[1]))].sort()
+const placeholders = (text: string) => [...icuArgumentNames(text)].sort()
 const sample = (text: string) =>
-  Object.fromEntries(placeholders(text).map((name) => [name, `<${name}>`]))
+  Object.fromEntries(
+    placeholders(text).map((name) => [
+      name,
+      new RegExp(`\\{${name}, plural`).test(text) ? 2 : `<${name}>`,
+    ])
+  )
 
 describe('email catalogue', () => {
   it('names messages', () => {

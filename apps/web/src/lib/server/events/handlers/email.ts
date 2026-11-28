@@ -260,6 +260,7 @@ async function deliverEmail(
       const data = event.data as EventPostMentionedData
       result = await sendPostMentionEmail({
         to: email,
+        i18n,
         mentionerName:
           cfg.mentionerName?.trim() ||
           (event.actor.type === 'user' ? event.actor.displayName?.trim() : undefined) ||
@@ -278,6 +279,7 @@ async function deliverEmail(
       // the comment itself.
       result = await sendPostMentionEmail({
         to: email,
+        i18n,
         mentionerName:
           cfg.mentionerName?.trim() ||
           (event.actor.type === 'user' ? event.actor.displayName?.trim() : undefined) ||
@@ -310,6 +312,7 @@ async function deliverEmail(
       const c = config as unknown as NoteMentionEmailConfig
       result = await sendNoteMentionEmail({
         to: email,
+        i18n,
         authorName: c.authorName,
         preview: c.preview,
         conversationUrl: c.ctaUrl,

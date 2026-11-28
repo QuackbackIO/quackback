@@ -56,6 +56,13 @@ export interface EmailReader {
   email?: string | null
 }
 
+interface LocaleOptions {
+  /** The browser language of the request the email answers, when it answers one. */
+  acceptLanguage?: string | null
+  /** Leave out the detected language (alerts about a sign-in). */
+  skipDetected?: boolean
+}
+
 interface ReaderFacts {
   chosen: string | null
   detected: string | null
@@ -103,7 +110,7 @@ async function readerFacts(reader: EmailReader): Promise<ReaderFacts | null> {
  */
 export async function recipientLocale(
   reader: EmailReader,
-  opts: { acceptLanguage?: string | null } = {}
+  opts: LocaleOptions = {}
 ): Promise<SupportedLocale> {
   try {
     const { getLanguageConfig } = await import('@/lib/server/domains/settings/settings.service')
@@ -122,7 +129,9 @@ export async function recipientLocale(
       // "For everyone" is the visitors' rule; a teammate is never a visitor.
       everyone: facts?.teammate || !language ? null : everyoneLocale(language),
       acceptLanguage: opts.acceptLanguage,
-      detected: facts?.detected,
+      // A sign-in alert skips it: the sign-in it reports may have just
+      // written someone else's browser language there.
+      detected: opts.skipDetected ? null : facts?.detected,
       accountLocale: facts?.accountLocale,
       mainLanguage: language?.mainLanguage,
     })
@@ -135,7 +144,7 @@ export async function recipientLocale(
 /** {@link recipientLocale}, as the words an email is written with. */
 export async function recipientEmailLocale(
   reader: EmailReader,
-  opts: { acceptLanguage?: string | null } = {}
+  opts: LocaleOptions = {}
 ): Promise<EmailLocale> {
   return emailLocaleFor(await recipientLocale(reader, opts))
 }

@@ -37,8 +37,27 @@ export const sendMessengerInstallInstructionsFn = createServerFn({ method: 'POST
         import('@/lib/shared/widget/install-prompt'),
         import('@/lib/server/config'),
       ])
+    // The address's own language when it has an account; else the language
+    // of the teammate who sends it, who knows who will read it.
+    const { recipientEmailLocale, recipientLocale, emailLocaleFor, requestAcceptLanguage } =
+      await import('@/lib/server/email/email-locale')
+    const { db, user, sql } = await import('@/lib/server/db')
+    const [known] = await db
+      .select({ id: user.id })
+      .from(user)
+      .where(sql`lower(${user.email}) = ${data.email.trim().toLowerCase()}`)
+      .limit(1)
+    const i18n = known
+      ? await recipientEmailLocale({ userId: known.id })
+      : await emailLocaleFor(
+          await recipientLocale(
+            { userId: auth.user.id },
+            { acceptLanguage: await requestAcceptLanguage() }
+          )
+        )
     const result = await sendMessengerInstallEmail({
       to: data.email,
+      i18n,
       senderName: auth.user.name || auth.user.email,
       workspaceName: auth.settings.name,
       // The short snippet: no comments for a one-line mail client to break.

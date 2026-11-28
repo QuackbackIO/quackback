@@ -535,6 +535,7 @@ describe('emailHook — post.mentioned', () => {
 
     expect(result).toEqual({ success: true })
     expect(mockPostMentionEmail).toHaveBeenCalledWith({
+      i18n: expect.objectContaining({ lang: 'en' }),
       to: 'user@example.com',
       mentionerName: 'Alex',
       postTitle: 'Why we should add dark mode',

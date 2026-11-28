@@ -84,7 +84,8 @@ type Sent = {
   fromPlanName: string | null
   deadline: string
   deadlineHeading: string
-  rows: { label: string; used: number; cap: number }[]
+  rows: { key: string; used: number; cap: number }[]
+  i18n?: { lang: string; t: (m: { id: string; defaultMessage: string }) => string }
   pausingFeatures: string[]
   limitsUrl: string | null
   planUrl: string | null
@@ -268,10 +269,25 @@ describe.skipIf(!fixture.available)('plan limits emails: content and recipients 
       limitsUrl: 'https://app.example.com/admin/settings/billing/limits',
       planUrl: 'https://app.example.com/admin/settings/billing',
       // Other test files commit rows of their own, so counts are at least ours.
-      rows: [expect.objectContaining({ label: 'Boards', used: expect.any(Number), cap: 1 })],
-      pausingFeatures: expect.arrayContaining(['Webhooks']),
+      rows: [expect.objectContaining({ key: 'maxBoards', used: expect.any(Number), cap: 1 })],
+      pausingFeatures: expect.arrayContaining(['webhooks']),
       ...deadlineText(new Date(`${view.deadlineDay}T12:00:00.000Z`), new Date()),
     })
+  })
+
+  it("writes each billing manager's email, and its dates, in their own language", async () => {
+    await testDb.update(user).set({ preferredLanguage: 'de' }).where(eq(user.email, owner.email))
+    await configure({ ...OSS_TIER_LIMITS, maxBoards: 1 })
+    const view = await getPlanLimits()
+    await settle()
+    const [sent] = sends().filter((s) => s.to === owner.email)
+    expect(sent?.i18n?.lang).toBe('de')
+    expect(
+      sent?.i18n?.t({ id: 'email.planLimits.reviewIssues', defaultMessage: 'Review issues' })
+    ).toBe('Probleme ansehen')
+    expect(sent).toMatchObject(
+      deadlineText(new Date(`${view.deadlineDay}T12:00:00.000Z`), new Date(), 'de')
+    )
   })
 
   it('sends to everyone who holds billing rights, through any role, and skips the rest', async () => {

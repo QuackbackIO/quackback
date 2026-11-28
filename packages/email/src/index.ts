@@ -57,7 +57,7 @@ import { MagicLinkEmail, MAGIC_LINK_MESSAGES } from './templates/magic-link'
 import { SignupNotAllowedEmail, SIGNUP_NOT_ALLOWED_MESSAGES } from './templates/signup-not-allowed'
 import { InvitationEmail, type InvitationEmailCopy } from './templates/invitation'
 import { PortalInviteEmail, PORTAL_INVITE_MESSAGES } from './templates/portal-invite'
-import { MessengerInstallEmail } from './templates/messenger-install'
+import { MessengerInstallEmail, MESSENGER_INSTALL_MESSAGES } from './templates/messenger-install'
 import { OnboardingEmail, type OnboardingEmailContent } from './templates/onboarding-email'
 import { StatusChangeEmail, statusChangeHeadline } from './templates/status-change'
 import { NewCommentEmail, NEW_COMMENT_MESSAGES } from './templates/new-comment'
@@ -79,14 +79,14 @@ import {
   type ModeratedItem,
 } from './templates/moderation-decision'
 export type { ModerationDecision, ModeratedItem } from './templates/moderation-decision'
-import { NoteMentionEmail } from './templates/note-mention'
+import { NoteMentionEmail, MENTION_MESSAGES } from './templates/note-mention'
 import { TicketEventEmail } from './templates/ticket-event'
 import {
   ChangelogPublishedEmail,
   CHANGELOG_PUBLISHED_MESSAGES,
 } from './templates/changelog-published'
 import { PasswordResetEmail, PASSWORD_RESET_MESSAGES } from './templates/password-reset'
-import { RecoveryCodeUsedEmail } from './templates/recovery-code-used'
+import { RecoveryCodeUsedEmail, SECURITY_EMAIL_MESSAGES } from './templates/recovery-code-used'
 import {
   PlanLimitsEmail,
   planLimitsSubject,
@@ -94,6 +94,7 @@ import {
 } from './templates/plan-limits'
 import {
   SendingDomainAttentionEmail,
+  sendingDomainAttentionTitle,
   type SendingDomainAttentionProblem,
 } from './templates/sending-domain-attention'
 import { DomainAttentionEmail, domainAttentionTitle } from './templates/domain-attention'
@@ -788,12 +789,13 @@ export async function sendMessengerInstallEmail(params: {
   workspaceName: string
   snippet: string
   logoUrl?: string
+  i18n?: EmailLocale
 }): Promise<EmailResult> {
-  const { to, senderName, workspaceName, snippet, logoUrl } = params
+  const { to, senderName, workspaceName, snippet, logoUrl, i18n = ENGLISH_EMAIL } = params
   return sendEmail({
     to,
-    subject: `Add ${workspaceName} Messenger to the website`,
-    react: MessengerInstallEmail({ senderName, workspaceName, snippet, logoUrl }),
+    subject: i18n.t(MESSENGER_INSTALL_MESSAGES.subject, { workspace: workspaceName }),
+    react: MessengerInstallEmail({ senderName, workspaceName, snippet, logoUrl, i18n }),
     emailType: 'MessengerInstallEmail',
     workspaceName,
     preview: { workspaceName },
@@ -963,6 +965,8 @@ interface SendRecoveryCodeUsedParams {
   userAgent?: string | null
   occurredAt: string
   logoUrl?: string
+  /** The reader's language; English without one. */
+  i18n?: EmailLocale
 }
 
 /**
@@ -973,13 +977,28 @@ interface SendRecoveryCodeUsedParams {
 export async function sendRecoveryCodeUsedEmail(
   params: SendRecoveryCodeUsedParams
 ): Promise<EmailResult> {
-  const { to, workspaceName, ipAddress, userAgent, occurredAt, logoUrl } = params
+  const {
+    to,
+    workspaceName,
+    ipAddress,
+    userAgent,
+    occurredAt,
+    logoUrl,
+    i18n = ENGLISH_EMAIL,
+  } = params
 
   log.debug('sending recovery-code-used alert')
   return sendEmail({
     to,
-    subject: 'A recovery code on your account was just used',
-    react: RecoveryCodeUsedEmail({ workspaceName, ipAddress, userAgent, occurredAt, logoUrl }),
+    subject: i18n.t(SECURITY_EMAIL_MESSAGES.recoveryEmailSubject),
+    react: RecoveryCodeUsedEmail({
+      workspaceName,
+      ipAddress,
+      userAgent,
+      occurredAt,
+      logoUrl,
+      i18n,
+    }),
     emailType: 'RecoveryCodeUsedEmail',
     workspaceName,
     preview: { occurredAt },
@@ -1000,6 +1019,8 @@ interface SendNewSignInParams {
   settingsUrl?: string | null
   ssoEnforced?: boolean
   logoUrl?: string
+  /** The reader's language; English without one. */
+  i18n?: EmailLocale
 }
 
 /** Additional-device sign-in alert. Triggered by
@@ -1017,13 +1038,15 @@ export async function sendNewSignInEmail(params: SendNewSignInParams): Promise<E
     settingsUrl,
     ssoEnforced,
     logoUrl,
+    i18n = ENGLISH_EMAIL,
   } = params
 
   log.debug('sending new-sign-in alert')
   return sendEmail({
     to,
-    subject: 'New sign-in to your account',
+    subject: i18n.t(SECURITY_EMAIL_MESSAGES.signInSubject),
     react: NewSignInEmail({
+      i18n,
       workspaceName,
       occurredAt,
       ipAddress,
@@ -1052,6 +1075,8 @@ interface SendSendingDomainAttentionParams {
   settingsUrl?: string | null
   workspaceName?: string
   logoUrl?: string
+  /** The reader's language; English without one. */
+  i18n?: EmailLocale
 }
 
 /**
@@ -1062,11 +1087,20 @@ interface SendSendingDomainAttentionParams {
 export async function sendSendingDomainAttentionEmail(
   params: SendSendingDomainAttentionParams
 ): Promise<EmailResult> {
-  const { to, domain, record, deadline, settingsUrl, workspaceName, logoUrl } = params
+  const {
+    to,
+    domain,
+    record,
+    deadline,
+    settingsUrl,
+    workspaceName,
+    logoUrl,
+    i18n = ENGLISH_EMAIL,
+  } = params
   log.debug('sending sending-domain attention alert')
   return sendEmail({
     to,
-    subject: `Sending from ${domain} needs attention`,
+    subject: sendingDomainAttentionTitle(domain, i18n),
     react: SendingDomainAttentionEmail({
       domain,
       record,
@@ -1074,6 +1108,7 @@ export async function sendSendingDomainAttentionEmail(
       settingsUrl,
       workspaceName,
       logoUrl,
+      i18n,
     }),
     emailType: 'SendingDomainAttentionEmail',
     preview: { domain },
@@ -1104,7 +1139,8 @@ export async function sendPlanLimitsEmail(params: SendPlanLimitsParams): Promise
       props.kind,
       props.workspaceName,
       props.planName,
-      props.rows.length === 0 ? props.deadline : undefined
+      props.rows.length === 0 ? props.deadline : undefined,
+      props.i18n
     ),
     react: PlanLimitsEmail(props),
     emailType: 'PlanLimitsEmail',
@@ -1117,6 +1153,8 @@ export type {
   PlanLimitsEmailKind,
   PlanLimitsEmailProps,
   PlanLimitsEmailRow,
+  PlanLimitsEmailIssueKey,
+  PlanLimitsEmailFeatureKey,
 } from './templates/plan-limits'
 
 // ============================================================================
@@ -1135,6 +1173,8 @@ interface SendDomainAttentionParams {
   settingsUrl?: string | null
   workspaceName?: string
   logoUrl?: string
+  /** The reader's language; English without one. */
+  i18n?: EmailLocale
 }
 
 /**
@@ -1145,12 +1185,21 @@ interface SendDomainAttentionParams {
 export async function sendDomainAttentionEmail(
   params: SendDomainAttentionParams
 ): Promise<EmailResult> {
-  const { to, domain, record, deadline, signInDomains, settingsUrl, workspaceName, logoUrl } =
-    params
+  const {
+    to,
+    domain,
+    record,
+    deadline,
+    signInDomains,
+    settingsUrl,
+    workspaceName,
+    logoUrl,
+    i18n = ENGLISH_EMAIL,
+  } = params
   log.debug('sending domain attention alert')
   return sendEmail({
     to,
-    subject: domainAttentionTitle(domain, !!signInDomains),
+    subject: domainAttentionTitle(domain, !!signInDomains, i18n),
     react: DomainAttentionEmail({
       domain,
       record,
@@ -1159,6 +1208,7 @@ export async function sendDomainAttentionEmail(
       settingsUrl,
       workspaceName,
       logoUrl,
+      i18n,
     }),
     emailType: 'DomainAttentionEmail',
     preview: { domain },
@@ -1902,6 +1952,8 @@ export interface SendPostMentionEmailArgs {
   from?: SendingIdentity
   /** Display name for the From header, on `from` or on the platform default. */
   fromDisplayName?: string
+  /** The reader's language; English without one. */
+  i18n?: EmailLocale
 }
 
 export async function sendPostMentionEmail(args: SendPostMentionEmailArgs): Promise<EmailResult> {
@@ -1917,15 +1969,17 @@ export async function sendPostMentionEmail(args: SendPostMentionEmailArgs): Prom
     logoUrl,
     from,
     fromDisplayName,
+    i18n = ENGLISH_EMAIL,
   } = args
 
-  const displayName = mentionerName || 'Anonymous user'
-  const subject = `${displayName} mentioned you in "${postTitle}"`
+  const displayName = mentionerName || i18n.t(MENTION_MESSAGES.anonymous)
+  const subject = i18n.t(MENTION_MESSAGES.postSubject, { name: displayName, post: postTitle })
 
   return sendEmail({
     to,
     subject,
     react: PostMentionEmail({
+      i18n,
       mentionerName,
       postTitle,
       excerpt,
@@ -2018,6 +2072,8 @@ export interface SendNoteMentionEmailArgs {
   inReplyTo?: string
   /** RFC 5322 threading: the full References chain (oldest first). */
   references?: string[]
+  /** The reader's language; English without one. */
+  i18n?: EmailLocale
 }
 
 /** Alert a teammate @-mentioned in an internal note on a conversation. */
@@ -2033,14 +2089,16 @@ export async function sendNoteMentionEmail(args: SendNoteMentionEmailArgs): Prom
     messageId,
     inReplyTo,
     references,
+    i18n = ENGLISH_EMAIL,
   } = args
 
-  const displayName = authorName || 'A teammate'
+  const displayName = authorName || i18n.t(MENTION_MESSAGES.someone)
 
   return sendEmail({
     to,
-    subject: `${displayName} mentioned you in an internal note`,
+    subject: i18n.t(MENTION_MESSAGES.preview, { name: displayName }),
     react: NoteMentionEmail({
+      i18n,
       authorName,
       preview,
       conversationUrl,
@@ -2355,6 +2413,7 @@ export { PasswordResetEmail } from './templates/password-reset'
 export { RecoveryCodeUsedEmail } from './templates/recovery-code-used'
 export {
   SendingDomainAttentionEmail,
+  sendingDomainAttentionTitle,
   sendingDomainDeadline,
   sendingDomainProblem,
 } from './templates/sending-domain-attention'
